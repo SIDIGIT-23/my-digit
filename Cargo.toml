@@ -1,0 +1,58 @@
+[package]
+name = "my-digit"
+version = "0.2.0"
+edition = "2024"
+authors = ["SIDIGIT-23 — Proyek IT SMP Negeri 23 Dumai"]
+description = "My Digit — aplikasi bendahara keuangan lembaga, made by SIDIGIT-23 Proyek IT SMP Negeri 23 Dumai"
+readme = "README.md"
+publish = false
+
+[[bin]]
+name = "my-digit"
+path = "src/main.rs"
+
+[dependencies]
+directories = "6.0.0"
+eframe = "0.37.0"
+egui_extras = { version = "0.37.0", features = ["datepicker"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+jiff = "0.2"
+miniz_oxide = "0.9.1"
+pdf-writer = "0.15.0"
+rfd = "0.17.2"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+
+# Ikon dan info versi pada my-digit.exe (hanya saat build di Windows).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.34"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+
+# ---------- Pemaketan installer (cargo-packager) ----------
+# macOS  : .app dan .dmg          → cargo packager --release
+# Windows: installer .exe (NSIS)  → cargo packager --release
+[package.metadata.packager]
+product-name = "My Digit"
+identifier = "id.sidigit23.mydigit"
+publisher = "SIDIGIT-23 — Proyek IT SMP Negeri 23 Dumai"
+copyright = "© SIDIGIT-23 — Proyek IT SMP Negeri 23 Dumai"
+category = "Finance"
+description = "Aplikasi Bendahara Keuangan Lembaga"
+before-packaging-command = "cargo build --release"
+out-dir = "dist"
+binaries-dir = "target/release"
+binaries = [{ path = "my-digit", main = true }]
+icons = ["assets/icon.icns", "assets/icon.ico", "assets/icon-512.png"]
+
+[package.metadata.packager.macos]
+minimum-system-version = "11.0"
+
+[package.metadata.packager.nsis]
+installer-icon = "assets/icon.ico"
+installer-mode = "currentUser"
+languages = ["Indonesian", "English"]
+# cargo-packager belum menyertakan terjemahan Indonesia untuk pesan installer.
+customLanguageFiles = { Indonesian = "assets/nsis/Indonesian.nsh" }

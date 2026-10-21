@@ -1,0 +1,40 @@
+# Membuat installer My Digit untuk Windows dan macOS.
+# Jalan otomatis saat tag versi (mis. v0.2.0) di-push, atau manual dari tab Actions.
+name: Rilis
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  paket:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            nama: windows-x64
+          - os: macos-latest
+            nama: macos-apple-silicon
+          # macos-13 sudah dihentikan GitHub (Des 2025); Intel tersedia sampai 2027.
+          - os: macos-15-intel
+            nama: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Uji
+        run: cargo test --locked
+      - name: Pasang cargo-packager
+        run: cargo install cargo-packager --locked
+      - name: Buat installer
+        run: cargo packager --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-digit-${{ matrix.nama }}
+          path: |
+            dist/*.dmg
+            dist/*-setup.exe
+          if-no-files-found: error
