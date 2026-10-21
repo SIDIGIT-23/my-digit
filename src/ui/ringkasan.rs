@@ -2,6 +2,7 @@
 
 use eframe::egui::{self, Align2, CornerRadius, FontId, RichText, Sense, Stroke, Vec2};
 
+use super::ikon;
 use super::{Halaman, MyDigitApp, tema, transaksi};
 use crate::format::{BULAN, hari_ini, rupiah, tanggal_panjang, tanggal_pendek};
 use crate::laporan::Periode;
@@ -20,13 +21,13 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.vertical(|ui| tema::judul(ui, "Ringkasan", &sub));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if tema::tombol(ui, "⇄  Transfer").clicked() {
+            if tema::tombol(ui, ikon::ARROWS_LEFT_RIGHT, "Transfer").clicked() {
                 transaksi::buka_baru(app, JenisTransaksi::Transfer);
             }
-            if tema::tombol(ui, "−  Pengeluaran").clicked() {
+            if tema::tombol(ui, ikon::MINUS, "Pengeluaran").clicked() {
                 transaksi::buka_baru(app, JenisTransaksi::Keluar);
             }
-            if tema::tombol_utama(ui, "+  Pemasukan").clicked() {
+            if tema::tombol_utama(ui, ikon::PLUS, "Pemasukan").clicked() {
                 transaksi::buka_baru(app, JenisTransaksi::Masuk);
             }
         });
@@ -45,21 +46,40 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     };
 
     let ubin = [
-        ("💰", "Saldo Kas & Bank", rupiah(saldo), p.aksen),
-        ("⬇", "Pemasukan bulan ini", rupiah(masuk), p.hijau),
-        ("⬆", "Pengeluaran bulan ini", rupiah(keluar), p.merah),
+        (ikon::WALLET, "Saldo Kas & Bank", rupiah(saldo), p.aksen),
         (
-            "🧾",
-            "Pajak belum disetor",
-            format!("Rp {pajak_tertahan}"),
-            p.oranye,
+            ikon::ARROW_DOWN_LEFT,
+            "Pemasukan bulan ini",
+            rupiah(masuk),
+            p.hijau,
         ),
+        (
+            ikon::ARROW_UP_RIGHT,
+            "Pengeluaran bulan ini",
+            rupiah(keluar),
+            p.merah,
+        ),
+        if app.pajak_tampil() {
+            (
+                ikon::SEAL_PERCENT,
+                "Pajak belum disetor",
+                format!("Rp {pajak_tertahan}"),
+                p.oranye,
+            )
+        } else {
+            let n = app
+                .transaksi
+                .iter()
+                .filter(|t| bulan_ini.memuat(t.tanggal))
+                .count();
+            (ikon::RECEIPT, "Transaksi bulan ini", n.to_string(), p.aksen)
+        },
     ];
     let kolom = if ui.available_width() > 900.0 { 4 } else { 2 };
     for baris in ubin.chunks(kolom) {
         ui.columns(kolom, |c| {
-            for (ui, (ikon, label, nilai, warna)) in c.iter_mut().zip(baris) {
-                tema::ubin(ui, ikon, label, nilai, *warna);
+            for (ui, (simbol, label, nilai, warna)) in c.iter_mut().zip(baris) {
+                tema::ubin(ui, simbol, label, nilai, *warna);
             }
         });
         ui.add_space(4.0);
@@ -82,11 +102,12 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             for a in &app.akun {
                 ui.horizontal(|ui| {
                     ui.label(
-                        RichText::new(if a.jenis == JenisAkun::Bank {
-                            "🏦"
+                        ikon::rt(if a.jenis == JenisAkun::Bank {
+                            ikon::BANK
                         } else {
-                            "💵"
+                            ikon::MONEY
                         })
+                        .size(18.0)
                         .color(p.aksen),
                     );
                     ui.vertical(|ui| {
@@ -148,10 +169,10 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
 
 fn baris_transaksi(app: &MyDigitApp, ui: &mut egui::Ui, t: &Transaksi) -> egui::Response {
     let p = palet(ui);
-    let (ikon, warna, tanda) = match t.jenis {
-        JenisTransaksi::Masuk => ("⬇", p.hijau, "+"),
-        JenisTransaksi::Keluar => ("⬆", p.merah, "−"),
-        JenisTransaksi::Transfer => ("⇄", p.aksen, ""),
+    let (simbol, warna, tanda) = match t.jenis {
+        JenisTransaksi::Masuk => (ikon::ARROW_DOWN_LEFT, p.hijau, "+"),
+        JenisTransaksi::Keluar => (ikon::ARROW_UP_RIGHT, p.merah, "−"),
+        JenisTransaksi::Transfer => (ikon::ARROWS_LEFT_RIGHT, p.aksen, ""),
     };
     let r = ui
         .horizontal(|ui| {
@@ -161,8 +182,8 @@ fn baris_transaksi(app: &MyDigitApp, ui: &mut egui::Ui, t: &Transaksi) -> egui::
             ui.painter().text(
                 rect.center(),
                 Align2::CENTER_CENTER,
-                ikon,
-                FontId::proportional(13.0),
+                simbol,
+                ikon::font(15.0),
                 warna,
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

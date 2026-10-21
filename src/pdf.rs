@@ -164,11 +164,17 @@ impl Kanvas {
     }
 
     /// Kop lembaga: logo, nama, alamat, dan garis ganda.
+    /// Kop lembaga: logo, instansi induk (maks. 2 baris), nama, alamat,
+    /// identitas/kontak, dan garis ganda. Tanpa induk dan identitas,
+    /// tata letaknya sama persis dengan My Digit v0.2.
     fn kop(&mut self, p: &ProfilLembaga) {
         let tinggi_logo = 48.0;
+        let induk = p.baris_induk();
+        let geser = 12.0 * induk.len() as f32;
+        let tinggi = tinggi_kop(p) - 8.0;
         let mut x = MARGIN;
         if self.ada_logo {
-            let y = self.y;
+            let y = self.y - (tinggi - tinggi_logo) / 2.0;
             let c = self.c();
             c.save_state();
             c.transform([tinggi_logo, 0.0, 0.0, tinggi_logo, MARGIN, y - tinggi_logo]);
@@ -176,13 +182,19 @@ impl Kanvas {
             c.restore_state();
             x += tinggi_logo + 12.0;
         }
+        let lebar = self.w - MARGIN - x;
+        let y = self.y;
+        for (i, baris) in induk.iter().enumerate() {
+            let baris = potong(baris, lebar, 10.0, Huruf::Tebal);
+            self.teks(Huruf::Tebal, 10.0, x, y - 10.0 - 12.0 * i as f32, &baris);
+        }
         let nama = if p.nama.is_empty() {
             "Nama Lembaga"
         } else {
             &p.nama
         };
-        let y = self.y;
-        self.teks(Huruf::Tebal, 15.0, x, y - 16.0, &nama.to_uppercase());
+        let nama = potong(&nama.to_uppercase(), lebar, 15.0, Huruf::Tebal);
+        self.teks(Huruf::Tebal, 15.0, x, y - 16.0 - geser, &nama);
         let mut info = p.alamat.clone();
         if !p.kota.is_empty() {
             if !info.is_empty() {
@@ -190,21 +202,24 @@ impl Kanvas {
             }
             info += &p.kota;
         }
-        self.teks(Huruf::Biasa, 9.0, x, y - 30.0, &info);
-        let kontak: Vec<&str> = [p.telepon.as_str(), p.email.as_str()]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect();
+        self.teks(
+            Huruf::Biasa,
+            9.0,
+            x,
+            y - 30.0 - geser,
+            &potong(&info, lebar, 9.0, Huruf::Biasa),
+        );
+        let kontak = baris_kontak(p);
         if !kontak.is_empty() {
             self.teks(
                 Huruf::Biasa,
                 9.0,
                 x,
-                y - 42.0,
-                &format!("Telp/Email: {}", kontak.join(" · ")),
+                y - 42.0 - geser,
+                &potong(&kontak, lebar, 9.0, Huruf::Biasa),
             );
         }
-        self.y -= tinggi_logo + 8.0;
+        self.y -= tinggi + 8.0;
         let (w, y) = (self.w, self.y);
         self.garis(MARGIN, y, w - MARGIN, y, 1.6);
         self.garis(MARGIN, y - 2.5, w - MARGIN, y - 2.5, 0.5);
@@ -224,7 +239,7 @@ impl Kanvas {
     }
 
     /// Blok dua tanda tangan. Kolom kanan selalu diawali kota dan tanggal.
-    /// Tiap pihak: (baris atas, jabatan, nama, NIP).
+    /// Tiap pihak: (baris atas, jabatan, nama, baris nomor induk yang sudah jadi).
     fn tanda_tangan(
         &mut self,
         p: &ProfilLembaga,
@@ -249,7 +264,8 @@ impl Kanvas {
                 atas.to_string()
             };
             self.teks_tengah(Huruf::Biasa, 10.0, cx, y - 10.0, &atas);
-            self.teks_tengah(Huruf::Biasa, 10.0, cx, y - 24.0, jabatan);
+            let jabatan = potong(jabatan, lebar - 10.0, 10.0, Huruf::Biasa);
+            self.teks_tengah(Huruf::Biasa, 10.0, cx, y - 24.0, &jabatan);
             let nama = if nama.is_empty() {
                 "(...............................)"
             } else {
@@ -259,7 +275,7 @@ impl Kanvas {
             let nw = lebar_teks(nama, 10.0, Huruf::Tebal);
             self.garis(cx - nw / 2.0, y - 88.0, cx + nw / 2.0, y - 88.0, 0.5);
             if !nip.is_empty() {
-                self.teks_tengah(Huruf::Biasa, 9.0, cx, y - 99.0, &format!("NIP. {nip}"));
+                self.teks_tengah(Huruf::Biasa, 9.0, cx, y - 99.0, nip);
             }
         }
         self.y -= 108.0;
@@ -433,6 +449,7 @@ pub fn laporan(
         k.kotak_isi(MARGIN, k.y - tinggi_baris, lebar_total, tinggi_baris, 0.94);
         baris(&mut k, total, Huruf::Tebal);
     }
+    let (nomor_kiri, nomor_kanan) = nomor_penanda_tangan(profil);
     k.tanda_tangan(
         profil,
         dicetak,
@@ -440,16 +457,47 @@ pub fn laporan(
             "Mengetahui,",
             &profil.jabatan_pimpinan,
             &profil.nama_pimpinan,
-            &profil.nip_pimpinan,
+            &nomor_kiri,
         ],
         [
             "",
-            "Bendahara",
+            &profil.jabatan_bendahara,
             &profil.nama_bendahara,
-            &profil.nip_bendahara,
+            &nomor_kanan,
         ],
     );
     k.selesai(logo)
+}
+
+/// Baris nomor induk pimpinan dan bendahara, mis. `"NIP. 1970…"`.
+fn nomor_penanda_tangan(p: &ProfilLembaga) -> (String, String) {
+    (
+        ProfilLembaga::baris_nomor(&p.label_nomor_pimpinan, &p.nip_pimpinan),
+        ProfilLembaga::baris_nomor(&p.label_nomor_bendahara, &p.nip_bendahara),
+    )
+}
+
+/// Baris identitas dan kontak di kop, mis. `"NPSN 10404123 · Telp/Email: …"`.
+pub fn baris_kontak(p: &ProfilLembaga) -> String {
+    let kontak: Vec<&str> = [p.telepon.as_str(), p.email.as_str()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
+    let kontak = if kontak.is_empty() {
+        String::new()
+    } else {
+        format!("Telp/Email: {}", kontak.join(" · "))
+    };
+    [p.baris_identitas(), kontak]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// Tinggi kop (termasuk jarak ke garis): 56 pt, +12 pt per baris induk.
+fn tinggi_kop(p: &ProfilLembaga) -> f32 {
+    48.0 + 12.0 * p.baris_induk().len() as f32 + 8.0
 }
 
 /// Baris judul bagian (mis. "PENERIMAAN"): satu sel huruf kapital semua.
@@ -471,30 +519,27 @@ pub fn kwitansi(
     k.kop(profil);
     k.judul("Kwitansi", &format!("No. {}", t.no_bukti));
 
+    let jabatan = profil.jabatan_bendahara.as_str();
     let bendahara = if profil.nama.is_empty() {
-        "Bendahara".to_string()
+        jabatan.to_string()
     } else {
-        format!("Bendahara {}", profil.nama)
+        format!("{jabatan} {}", profil.nama)
     };
+    let (_, nomor) = nomor_penanda_tangan(profil);
     // (sudah terima dari, [kiri: penyerah], [kanan: penerima])
     let (dari, kiri, kanan) = match t.jenis {
         JenisTransaksi::Masuk => (
             or_titik(&t.pihak).to_string(),
             ["", "Penyetor", t.pihak.as_str(), ""],
-            [
-                "",
-                "Bendahara",
-                profil.nama_bendahara.as_str(),
-                profil.nip_bendahara.as_str(),
-            ],
+            ["", jabatan, profil.nama_bendahara.as_str(), nomor.as_str()],
         ),
         _ => (
             bendahara,
             [
                 "Lunas dibayar,",
-                "Bendahara",
+                jabatan,
                 profil.nama_bendahara.as_str(),
-                profil.nip_bendahara.as_str(),
+                nomor.as_str(),
             ],
             ["", "Penerima", t.pihak.as_str(), ""],
         ),
@@ -599,11 +644,12 @@ pub fn berita_acara_kas(profil: &ProfilLembaga, logo: Option<&Gambar>, d: &DataO
         lebar,
         &format!(
             "Pada hari ini, {}, tanggal {}, telah dilakukan pemeriksaan {} pada {} \
-             yang dikelola oleh Bendahara, dengan hasil sebagai berikut:",
+             yang dikelola oleh {}, dengan hasil sebagai berikut:",
             nama_hari(d.tanggal.weekday()),
             tanggal_panjang(d.tanggal),
             d.akun,
-            lembaga
+            lembaga,
+            profil.jabatan_bendahara
         ),
     );
     k.y -= 8.0;
@@ -673,6 +719,7 @@ pub fn berita_acara_kas(profil: &ProfilLembaga, logo: Option<&Gambar>, d: &DataO
         lebar,
         "Demikian berita acara ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.",
     );
+    let (nomor_kiri, nomor_kanan) = nomor_penanda_tangan(profil);
     k.tanda_tangan(
         profil,
         d.tanggal,
@@ -680,13 +727,13 @@ pub fn berita_acara_kas(profil: &ProfilLembaga, logo: Option<&Gambar>, d: &DataO
             "Yang memeriksa,",
             &profil.jabatan_pimpinan,
             &profil.nama_pimpinan,
-            &profil.nip_pimpinan,
+            &nomor_kiri,
         ],
         [
             "",
-            "Yang diperiksa, Bendahara",
+            &format!("Yang diperiksa, {}", profil.jabatan_bendahara),
             &profil.nama_bendahara,
-            &profil.nip_bendahara,
+            &nomor_kanan,
         ],
     );
     k.selesai(logo)
@@ -723,20 +770,29 @@ const LEBAR_HELVETICA: [u16; 95] = [
     222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
 ];
 
+/// Lebar glyph Helvetica-Bold (per 1000 unit) untuk karakter ASCII 32..=126.
+const LEBAR_HELVETICA_TEBAL: [u16; 95] = [
+    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+    556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+    611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+    667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+    278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+
 fn lebar_teks(s: &str, ukuran: f32, huruf: Huruf) -> f32 {
+    let tabel = if matches!(huruf, Huruf::Tebal) {
+        &LEBAR_HELVETICA_TEBAL
+    } else {
+        &LEBAR_HELVETICA
+    };
     let unit: u32 = s
         .chars()
         .map(|c| match c as u32 {
-            32..=126 => LEBAR_HELVETICA[c as usize - 32] as u32,
+            32..=126 => tabel[c as usize - 32] as u32,
             _ => 556,
         })
         .sum();
-    let faktor = if matches!(huruf, Huruf::Tebal) {
-        1.06
-    } else {
-        1.0
-    };
-    unit as f32 / 1000.0 * ukuran * faktor
+    unit as f32 / 1000.0 * ukuran
 }
 
 /// Potong teks dengan "..." agar muat di `lebar`.
@@ -786,6 +842,7 @@ fn win_ansi(s: &str) -> Vec<u8> {
             '“' => 0x93,
             '”' => 0x94,
             '•' | '·' => 0x95,
+            '…' => 0x85,
             '€' => 0x80,
             c if (c as u32) < 0x80 || (0xA0..=0xFF).contains(&(c as u32)) => c as u8,
             _ => b'?',
@@ -940,4 +997,93 @@ fn contoh_pdf() {
         berita_acara_kas(&profil, logo.as_ref(), &d),
     )
     .unwrap();
+}
+
+#[cfg(test)]
+mod tests_penanda_tangan {
+    use super::*;
+    use crate::laporan::{Periode, Sumber};
+
+    fn ada(hay: &[u8], s: &str) -> bool {
+        hay.windows(s.len()).any(|w| w == s.as_bytes())
+    }
+
+    #[test]
+    fn kop_tanpa_isian_baru_identik() {
+        let mut p = ProfilLembaga::default();
+        assert_eq!(tinggi_kop(&p), 56.0, "sama dengan v0.2");
+        p.induk = "Pemerintah Kota Dumai\nDinas Pendidikan\nBaris ketiga diabaikan".into();
+        assert_eq!(
+            p.baris_induk(),
+            ["PEMERINTAH KOTA DUMAI", "DINAS PENDIDIKAN"]
+        );
+        assert_eq!(tinggi_kop(&p), 80.0);
+    }
+
+    #[test]
+    fn ttd_label_nomor() {
+        let akun = vec![Akun {
+            id: 1,
+            nama: "Kas".into(),
+            jenis: JenisAkun::Tunai,
+            no_rekening: String::new(),
+            saldo_awal: 0,
+        }];
+        let s = Sumber {
+            akun: &akun,
+            kategori: &[],
+            transaksi: &[],
+        };
+        let tabel = s.bku(Periode::bulan(2026, 10));
+        let tgl = Date::constant(2026, 10, 31);
+        let mut p = ProfilLembaga {
+            nama: "Masjid Al-Ikhlas".into(),
+            jabatan_bendahara: "Bendahara Masjid".into(),
+            label_nomor_pimpinan: "NIY".into(),
+            nip_pimpinan: "123".into(),
+            label_nomor_bendahara: String::new(),
+            nip_bendahara: "456789".into(),
+            id1_label: "No. SK Kemenkumham".into(),
+            id1_nomor: "AHU-01".into(),
+            ..Default::default()
+        };
+        let lap = laporan(&p, None, &tabel, tgl);
+        assert!(ada(&lap, "NIY. 123"));
+        assert!(ada(&lap, "(456789)"), "label kosong → nomor saja");
+        assert!(!ada(&lap, "NIP."));
+        assert!(ada(&lap, "Bendahara Masjid"));
+        assert!(ada(&lap, "No. SK Kemenkumham AHU-01"));
+
+        let t = Transaksi {
+            id: 1,
+            tanggal: tgl,
+            no_bukti: "BKK-2026-0001".into(),
+            jenis: JenisTransaksi::Keluar,
+            akun_id: 1,
+            akun_tujuan_id: None,
+            kategori_id: None,
+            uraian: "Santunan".into(),
+            jumlah: 100_000,
+            pihak: "Panti".into(),
+            sumber_dana: String::new(),
+            pungutan: Pungutan::default(),
+            setor_pajak: None,
+        };
+        assert!(ada(&kwitansi(&p, None, &t, None), "Bendahara Masjid"));
+        let jumlah = [0u32; PECAHAN.len()];
+        let d = DataOpname {
+            tanggal: tgl,
+            akun: "Kas",
+            jumlah: &jumlah,
+            saldo_buku: 0,
+            keterangan: "",
+        };
+        assert!(ada(
+            &berita_acara_kas(&p, None, &d),
+            "Yang diperiksa, Bendahara Masjid"
+        ));
+
+        p.label_nomor_bendahara = "NIP".into();
+        assert!(ada(&laporan(&p, None, &tabel, tgl), "NIP. 456789"));
+    }
 }

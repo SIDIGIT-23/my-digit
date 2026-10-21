@@ -6,6 +6,10 @@ use eframe::egui::{
     self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, Response,
     RichText, Stroke, TextStyle, Theme, Ui, Vec2,
 };
+use egui_extras::DatePickerButton;
+use jiff::civil::Date;
+
+use super::ikon;
 
 #[derive(Clone, Copy)]
 pub struct Palet {
@@ -88,6 +92,7 @@ pub fn pasang(ctx: &egui::Context) {
             .or_default()
             .insert(0, "sistem".into());
     }
+    ikon::pasang(&mut fonts);
     ctx.set_fonts(fonts);
 
     for (theme, p) in [(Theme::Light, TERANG), (Theme::Dark, GELAP)] {
@@ -186,11 +191,21 @@ pub fn label_redup(ui: &mut Ui, s: impl Into<String>) -> Response {
     ui.label(RichText::new(s.into()).color(p.teks2))
 }
 
-/// Tombol utama berwarna aksen.
-pub fn tombol_utama(ui: &mut Ui, teks: &str) -> Response {
+/// Tombol berisi ikon (boleh `""`) dan teks dengan warna yang sama.
+fn isi_tombol<'a>(ikon: &str, teks: RichText, warna: Color32) -> egui::Button<'a> {
+    let teks = teks.color(warna);
+    if ikon.is_empty() {
+        egui::Button::new(teks)
+    } else {
+        egui::Button::new((ikon::rt(ikon).color(warna), teks))
+    }
+}
+
+/// Tombol utama berwarna aksen. `ikon` boleh `""`.
+pub fn tombol_utama(ui: &mut Ui, ikon: &str, teks: &str) -> Response {
     let p = palet(ui);
     ui.add(
-        egui::Button::new(RichText::new(teks).color(Color32::WHITE).strong())
+        isi_tombol(ikon, RichText::new(teks).strong(), Color32::WHITE)
             .fill(p.aksen)
             .stroke(Stroke::NONE)
             .corner_radius(CornerRadius::same(7))
@@ -198,15 +213,92 @@ pub fn tombol_utama(ui: &mut Ui, teks: &str) -> Response {
     )
 }
 
-/// Tombol sekunder dengan garis tipis.
-pub fn tombol(ui: &mut Ui, teks: &str) -> Response {
-    ui.add(egui::Button::new(teks).min_size(Vec2::new(0.0, 28.0)))
+/// Tombol sekunder dengan garis tipis. `ikon` boleh `""`.
+pub fn tombol(ui: &mut Ui, ikon: &str, teks: &str) -> Response {
+    let p = palet(ui);
+    ui.add(isi_tombol(ikon, RichText::new(teks), p.teks).min_size(Vec2::new(0.0, 28.0)))
 }
 
-/// Tombol aksi berbahaya (hapus).
-pub fn tombol_bahaya(ui: &mut Ui, teks: &str) -> Response {
+/// Tombol aksi berbahaya (hapus). `ikon` boleh `""`.
+pub fn tombol_bahaya(ui: &mut Ui, ikon: &str, teks: &str) -> Response {
     let p = palet(ui);
-    ui.add(egui::Button::new(RichText::new(teks).color(p.merah)).min_size(Vec2::new(0.0, 28.0)))
+    ui.add(isi_tombol(ikon, RichText::new(teks), p.merah).min_size(Vec2::new(0.0, 28.0)))
+}
+
+/// Tombol ikon kecil tanpa bingkai, dengan keterangan saat disorot.
+pub fn tombol_ikon(ui: &mut Ui, ikon: &str, keterangan: &str, warna: Color32) -> Response {
+    ui.add(egui::Button::new(ikon::rt(ikon).size(15.0).color(warna)).frame(false))
+        .on_hover_text(keterangan)
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Ikon dropdown ala tombol pop-up macOS (chevron atas-bawah),
+/// untuk `ComboBox::icon`.
+pub fn ikon_dropdown(
+    ui: &Ui,
+    rect: egui::Rect,
+    visual: &egui::style::WidgetVisuals,
+    _terbuka: bool,
+) {
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        ikon::CARET_UP_DOWN,
+        ikon::font(rect.height().max(12.0) * 1.15),
+        visual.fg_stroke.color,
+    );
+}
+
+/// Chevron kanan/bawah untuk `CollapsingHeader::icon`.
+pub fn ikon_lipat(ui: &mut Ui, keterbukaan: f32, respons: &Response) {
+    let simbol = if keterbukaan > 0.5 {
+        ikon::CARET_DOWN
+    } else {
+        ikon::CARET_RIGHT
+    };
+    let warna = palet(ui).teks2;
+    ui.painter().text(
+        respons.rect.center(),
+        egui::Align2::CENTER_CENTER,
+        simbol,
+        ikon::font(14.0),
+        warna,
+    );
+}
+
+/// Teks petunjuk isian yang diawali ikon, mis. kaca pembesar pada kolom cari.
+pub fn petunjuk_ikon(ui: &Ui, simbol: &str, teks: &str) -> egui::text::LayoutJob {
+    let warna = ui.visuals().weak_text_color();
+    let format = |font_id| egui::TextFormat {
+        font_id,
+        color: warna,
+        valign: egui::Align::Center,
+        ..Default::default()
+    };
+    let mut job = egui::text::LayoutJob::default();
+    job.append(simbol, 0.0, format(ikon::font(14.0)));
+    job.append(
+        &format!("  {teks}"),
+        0.0,
+        format(FontId::proportional(13.5)),
+    );
+    job
+}
+
+/// Pemilih tanggal dengan ikon kalender (menggantikan emoji bawaan egui).
+pub fn pilih_tanggal(ui: &mut Ui, id: &str, tanggal: &mut Date) -> Response {
+    let p = palet(ui);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(ikon::rt(ikon::CALENDAR_BLANK).size(15.0).color(p.teks2));
+        ui.add(
+            DatePickerButton::new(tanggal)
+                .id_salt(id)
+                .format("%d/%m/%Y")
+                .show_icon(false),
+        )
+    })
+    .inner
 }
 
 /// Kontrol segmen ala macOS.
@@ -257,7 +349,7 @@ pub fn ubin(ui: &mut Ui, ikon: &str, label: &str, nilai: &str, warna: Color32) {
         let p = palet(ui);
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(ikon).size(15.0).color(warna));
+                ui.label(ikon::rt(ikon).size(15.0).color(warna));
                 ui.add(egui::Label::new(RichText::new(label).color(p.teks2)).truncate());
             });
             ui.add(egui::Label::new(RichText::new(nilai).size(21.0).strong()).truncate());
@@ -292,6 +384,45 @@ pub fn baris_form<R>(ui: &mut Ui, label: &str, isi: impl FnOnce(&mut Ui) -> R) -
         isi(ui)
     })
     .inner
+}
+
+/// Isian teks bersaran: sampai 3 saran tampil sebagai tombol kecil; lebih
+/// dari itu menjadi menu pop-up di sebelah isian (seperti combo box macOS).
+pub fn isian_saran(
+    ui: &mut Ui,
+    teks: &mut String,
+    petunjuk: &str,
+    lebar: f32,
+    saran: &[&str],
+) -> bool {
+    let awal = teks.clone();
+    ui.horizontal_wrapped(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(teks)
+                .hint_text(petunjuk)
+                .desired_width(lebar)
+                .margin(Margin::symmetric(8, 5)),
+        );
+        if saran.len() > 3 {
+            ui.menu_button(ikon::rt(ikon::CARET_UP_DOWN), |ui| {
+                for s in saran {
+                    if ui.selectable_label(*s == teks.as_str(), *s).clicked() {
+                        *teks = s.to_string();
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .on_hover_text("Pilih dari saran");
+        } else {
+            for s in saran {
+                if *s != teks.as_str() && ui.small_button(*s).clicked() {
+                    *teks = s.to_string();
+                }
+            }
+        }
+    });
+    *teks != awal
 }
 
 /// Isian teks satu baris dengan lebar penuh.

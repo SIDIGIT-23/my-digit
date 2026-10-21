@@ -2,8 +2,10 @@
 
 mod akun;
 mod anggaran;
+pub mod ikon;
 mod kas;
 mod laporan;
+mod penyiapan;
 mod profil;
 mod ringkasan;
 pub mod tema;
@@ -15,7 +17,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, Color32, CornerRadius, Margin, RichText, Stroke, TextureHandle, Vec2};
 
 use crate::branding;
-use crate::db::{Db, folder_data};
+use crate::db::{Db, FOLDER_CADANGAN_OTOMATIS, InfoCadangan, folder_data};
 use crate::format::{BULAN, hari_ini};
 use crate::laporan::{Periode, Sumber};
 use crate::model::*;
@@ -46,29 +48,36 @@ const MENU: &[(&str, &[ItemMenu])] = &[
     (
         "Keuangan",
         &[
-            (Halaman::Ringkasan, "🏠", "Ringkasan"),
-            (Halaman::Transaksi, "🧾", "Transaksi"),
-            (Halaman::Anggaran, "🎯", "Anggaran"),
-            (Halaman::Laporan, "📊", "Laporan"),
-            (Halaman::PemeriksaanKas, "💵", "Pemeriksaan Kas"),
+            (Halaman::Ringkasan, ikon::HOUSE, "Ringkasan"),
+            (Halaman::Transaksi, ikon::RECEIPT, "Transaksi"),
+            (Halaman::Anggaran, ikon::CHART_PIE_SLICE, "Anggaran"),
+            (Halaman::Laporan, ikon::FILE_TEXT, "Laporan"),
+            (Halaman::PemeriksaanKas, ikon::MONEY, "Pemeriksaan Kas"),
         ],
     ),
     (
         "Data Master",
         &[
-            (Halaman::Akun, "🏦", "Akun Kas & Bank"),
-            (Halaman::Kategori, "🏷", "Kategori"),
+            (Halaman::Akun, ikon::BANK, "Akun Kas & Bank"),
+            (Halaman::Kategori, ikon::TAG, "Kategori"),
         ],
     ),
     (
-        "Lembaga",
+        "Pengaturan",
         &[
-            (Halaman::Profil, "🏫", "Profil Lembaga"),
-            (Halaman::Pengaturan, "⚙", "Pengaturan"),
-            (Halaman::Tentang, "ℹ", "Tentang Aplikasi"),
+            // Label dan ikon Profil mengikuti jenis ("Profil Sekolah", ...).
+            (Halaman::Profil, ikon::BUILDINGS, "Profil"),
+            (Halaman::Pengaturan, ikon::GEAR_SIX, "Tampilan & Data"),
+            (Halaman::Tentang, ikon::INFO, "Tentang Aplikasi"),
         ],
     ),
 ];
+
+/// Berkas cadangan yang menunggu konfirmasi pemulihan.
+pub struct Pulih {
+    path: PathBuf,
+    info: Result<InfoCadangan, String>,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PilihanTema {
@@ -138,16 +147,21 @@ pub struct MyDigitApp {
     pub kategori: Vec<Kategori>,
     pub transaksi: Vec<Transaksi>,
     pub profil: ProfilLembaga,
+    pub instansi: PengaturanInstansi,
     pub halaman: Halaman,
     pub tema: PilihanTema,
 
-    logo_app: TextureHandle,
+    pub logo_app: TextureHandle,
     pub logo_lembaga: Option<TextureHandle>,
     splash_sampai: Option<Instant>,
     pesan: Option<Pesan>,
     galat_db: Option<String>,
     /// Pengembangan: simpan tangkapan layar ke berkas ini lalu keluar.
     tangkap: Option<(PathBuf, u32)>,
+    pulih: Option<Pulih>,
+
+    /// Layar pertama "Masuk sebagai"; `Some` selama penyiapan belum selesai.
+    pub ui_penyiapan: Option<penyiapan::State>,
 
     pub ui_transaksi: transaksi::State,
     pub ui_akun: akun::State,
@@ -173,6 +187,7 @@ impl MyDigitApp {
             kategori: Vec::new(),
             transaksi: Vec::new(),
             profil: ProfilLembaga::default(),
+            instansi: PengaturanInstansi::default(),
             halaman: Halaman::Ringkasan,
             tema: PilihanTema::Sistem,
             logo_app,
@@ -181,6 +196,8 @@ impl MyDigitApp {
             pesan: None,
             galat_db,
             tangkap: std::env::var_os("MY_DIGIT_TANGKAP").map(|p| (PathBuf::from(p), 0)),
+            pulih: None,
+            ui_penyiapan: None,
             ui_transaksi: transaksi::State::default(),
             ui_akun: akun::State::default(),
             ui_anggaran: anggaran::State::default(),
@@ -193,6 +210,14 @@ impl MyDigitApp {
         }
         app.tema.terapkan(&cc.egui_ctx);
         app.muat_ulang(&cc.egui_ctx);
+        app.cek_penyiapan();
+        if app
+            .db
+            .as_ref()
+            .is_some_and(|db| db.salinan_migrasi.is_some())
+        {
+            app.info("Data diperbarui ke format baru. Salinan pengaman tersimpan di folder Cadangan Otomatis.");
+        }
         if let Ok(h) = std::env::var("MY_DIGIT_HALAMAN") {
             app.buka_halaman_dev(&h);
         }
@@ -215,6 +240,19 @@ impl MyDigitApp {
             "splash" => {
                 self.splash_sampai = Some(Instant::now() + Duration::from_secs(60));
                 Halaman::Ringkasan
+            }
+            "penyiapan" | "penyiapan-data" => {
+                let mut st = penyiapan::State::default();
+                if nama == "penyiapan-data" {
+                    st.pilih(crate::instansi::JenisInstansi::Instansi);
+                    st.langkah = penyiapan::Langkah::Data;
+                }
+                self.ui_penyiapan = Some(st);
+                Halaman::Ringkasan
+            }
+            "ubah-jenis" => {
+                profil::State::buka_ubah_jenis(self, crate::instansi::JenisInstansi::Organisasi);
+                Halaman::Profil
             }
             _ => Halaman::Ringkasan,
         };
@@ -259,6 +297,7 @@ impl MyDigitApp {
             ))
         })();
         self.profil = db.profil();
+        self.instansi = db.instansi();
         match hasil {
             Ok((a, k, t)) => {
                 self.akun = a;
@@ -268,10 +307,48 @@ impl MyDigitApp {
             Err(e) => self.galat(e),
         }
         self.ui_profil.draf = None;
+        self.ui_profil.draf_instansi = None;
         self.logo_lembaga = self
             .path_logo_lembaga()
             .and_then(|p| std::fs::read(p).ok())
             .and_then(|b| muat_tekstur(ctx, "logo-lembaga", &b));
+    }
+
+    /// Tampilkan layar "Masuk sebagai" bila data belum disiapkan.
+    pub fn cek_penyiapan(&mut self) {
+        self.ui_penyiapan = self
+            .db
+            .as_ref()
+            .filter(|db| db.perlu_penyiapan())
+            .map(|db| penyiapan::State::dari(db.profil(), db.instansi()));
+    }
+
+    /// Kosongkan semua state halaman (draf, pilihan, dialog) yang bisa
+    /// merujuk id lama — dipanggil setelah data diganti.
+    pub fn reset_ui(&mut self) {
+        self.ui_transaksi = transaksi::State::default();
+        self.ui_akun = akun::State::default();
+        self.ui_anggaran = anggaran::State::default();
+        self.ui_laporan = laporan::State::default();
+        self.ui_kas = kas::State::default();
+        self.ui_profil = profil::State::default();
+        self.pulih = None;
+    }
+
+    /// Bagian pajak tampil bila fiturnya aktif atau sudah ada data pajak.
+    pub fn pajak_tampil(&self) -> bool {
+        self.instansi.pajak || self.ada_data_pajak()
+    }
+
+    pub fn ada_data_pajak(&self) -> bool {
+        self.transaksi
+            .iter()
+            .any(|t| t.pungutan.total() > 0 || t.setor_pajak.is_some())
+    }
+
+    /// "Profil Sekolah", "Profil Organisasi", ...
+    pub fn judul_profil(&self) -> String {
+        format!("Profil {}", self.instansi.jenis.label())
     }
 
     pub fn sumber(&self) -> Sumber<'_> {
@@ -417,12 +494,21 @@ impl MyDigitApp {
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 0.0;
                         ui.label(RichText::new(branding::APP_NAME).size(15.0).strong());
-                        let nama = if self.profil.nama.is_empty() {
-                            "Bendahara Lembaga"
+                        let nama = if !self.profil.nama.is_empty() {
+                            self.profil.nama.clone()
+                        } else if !self.instansi.subjenis.is_empty() {
+                            format!(
+                                "{} · {}",
+                                self.instansi.jenis.label(),
+                                self.instansi.subjenis
+                            )
                         } else {
-                            &self.profil.nama
+                            self.instansi.jenis.label().to_string()
                         };
-                        ui.label(RichText::new(nama).size(11.0).color(p.teks2));
+                        ui.add(
+                            egui::Label::new(RichText::new(nama).size(11.0).color(p.teks2))
+                                .truncate(),
+                        );
                     });
                 });
                 ui.add_space(10.0);
@@ -433,8 +519,13 @@ impl MyDigitApp {
                         ui.label(RichText::new(*bagian).size(11.0).strong().color(p.teks2));
                     });
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    for (h, ikon, label) in *item {
-                        if item_sidebar(ui, ikon, label, self.halaman == *h).clicked() {
+                    for (h, simbol, label) in *item {
+                        let (simbol, label) = if *h == Halaman::Profil {
+                            (self.instansi.jenis.ikon(), self.judul_profil())
+                        } else {
+                            (*simbol, label.to_string())
+                        };
+                        if item_sidebar(ui, simbol, &label, self.halaman == *h).clicked() {
                             self.halaman = *h;
                         }
                     }
@@ -485,7 +576,15 @@ impl MyDigitApp {
                         color: Color32::from_black_alpha(40),
                     })
                     .show(ui, |ui| {
-                        ui.label(RichText::new(teks).color(Color32::WHITE));
+                        ui.horizontal(|ui| {
+                            let simbol = if galat {
+                                ikon::WARNING_CIRCLE
+                            } else {
+                                ikon::CHECK_CIRCLE
+                            };
+                            ui.label(ikon::rt(simbol).size(16.0).color(Color32::WHITE));
+                            ui.label(RichText::new(teks).color(Color32::WHITE));
+                        });
                     });
             });
     }
@@ -502,8 +601,28 @@ impl MyDigitApp {
                         .size(18.0)
                         .strong(),
                 );
+                ui.set_max_width(560.0);
                 ui.label(&galat);
                 ui.label(format!("Lokasi: {}", folder_data().display()));
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if tema::tombol_utama(ui, ikon::ARROW_COUNTER_CLOCKWISE, "Coba Lagi").clicked()
+                    {
+                        match Db::buka_bawaan() {
+                            Ok(db) => {
+                                self.db = Some(db);
+                                self.galat_db = None;
+                                let ctx = ui.ctx().clone();
+                                self.muat_ulang(&ctx);
+                                self.cek_penyiapan();
+                            }
+                            Err(e) => self.galat_db = Some(e),
+                        }
+                    }
+                    if tema::tombol(ui, ikon::FOLDER_OPEN, "Buka Folder Data").clicked() {
+                        buka_berkas(&folder_data());
+                    }
+                });
             });
         });
     }
@@ -527,7 +646,7 @@ impl MyDigitApp {
                         "Buku Kas Umum, Buku Pembantu Kas, Bank, dan Pajak",
                         "Anggaran tahunan dan laporan realisasi",
                         "Kwitansi dan Berita Acara Pemeriksaan Kas siap cetak",
-                        "Ekspor PDF dan CSV (Excel)",
+                        "Ekspor PDF dan Excel (.xlsx) siap cetak",
                         "Cadangan dan pemulihan data",
                     ] {
                         ui.label(format!("•  {f}"));
@@ -539,7 +658,7 @@ impl MyDigitApp {
 
     fn pengaturan(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        tema::judul(ui, "Pengaturan", "Tampilan dan keamanan data.");
+        tema::judul(ui, "Tampilan & Data", "Tema aplikasi dan keamanan data.");
         tema::kartu(ui, |ui| {
             tema::subjudul(ui, "Tampilan");
             tema::baris_form(ui, "Tema", |ui| {
@@ -564,73 +683,207 @@ impl MyDigitApp {
             tema::subjudul(ui, "Data");
             let lokasi = self.db().path().display().to_string();
             tema::baris_form(ui, "Lokasi database", |ui| {
-                ui.label(RichText::new(&lokasi).monospace());
+                ui.add(egui::Label::new(RichText::new(&lokasi).monospace()).truncate());
+            });
+            tema::baris_form(ui, "Salinan otomatis", |ui| {
+                if tema::tombol(ui, ikon::FOLDER_OPEN, "Tampilkan Salinan Otomatis").clicked() {
+                    let dir = self
+                        .db()
+                        .path()
+                        .parent()
+                        .map(|p| p.join(FOLDER_CADANGAN_OTOMATIS))
+                        .unwrap_or_else(folder_data);
+                    buka_berkas(if dir.exists() {
+                        &dir
+                    } else {
+                        dir.parent().unwrap_or(&dir)
+                    });
+                }
             });
             tema::label_redup(
                 ui,
                 "Cadangkan data secara berkala, misalnya setiap akhir bulan, ke flashdisk atau penyimpanan awan.",
             );
-            ui.horizontal(|ui| {
-                if tema::tombol_utama(ui, "Cadangkan Data…").clicked() {
+            ui.horizontal_wrapped(|ui| {
+                if tema::tombol_utama(ui, ikon::ARCHIVE, "Cadangkan Data…").clicked() {
                     self.cadangkan();
                 }
-                if tema::tombol(ui, "Pulihkan dari Cadangan…").clicked() {
-                    self.ui_profil.pulihkan = rfd::FileDialog::new()
-                        .add_filter("Cadangan My Digit", &["sqlite", "db"])
-                        .pick_file();
+                if tema::tombol(ui, ikon::ARROW_COUNTER_CLOCKWISE, "Pulihkan dari Cadangan…")
+                    .clicked()
+                {
+                    self.mulai_pulihkan();
                 }
-                if tema::tombol(ui, "Buka Folder Data").clicked() {
+                if tema::tombol(ui, ikon::FOLDER_OPEN, "Buka Folder Data").clicked() {
                     buka_berkas(&folder_data());
                 }
             });
         });
+    }
 
-        if let Some(path) = self.ui_profil.pulihkan.clone() {
-            let mut tutup = false;
-            let mut lanjut = false;
-            egui::Modal::new(egui::Id::unique("konfirmasi-pulihkan")).show(&ctx, |ui| {
-                ui.set_width(380.0);
-                tema::subjudul(ui, "Pulihkan data?");
-                ui.label(format!(
-                    "Semua data saat ini akan diganti dengan isi cadangan:\n{}",
-                    path.display()
-                ));
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if tema::tombol_bahaya(ui, "Ganti Data").clicked() {
-                        lanjut = true;
+    /// Pilih berkas cadangan lalu tampilkan lembar konfirmasi.
+    pub fn mulai_pulihkan(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Cadangan My Digit", &["sqlite", "db"])
+            .pick_file()
+        else {
+            return;
+        };
+        let info = Db::periksa_cadangan(&path);
+        self.pulih = Some(Pulih { path, info });
+    }
+
+    /// Lembar "Pulihkan data?": bandingkan data saat ini dengan isi cadangan.
+    fn lembar_pulihkan(&mut self, ctx: &egui::Context) {
+        let Some(pulih) = &self.pulih else { return };
+        let sekarang = self.db.as_ref().map(|db| db.info());
+        let mut tutup = false;
+        let mut lanjut = false;
+        let r = egui::Modal::new(egui::Id::unique("konfirmasi-pulihkan")).show(ctx, |ui| {
+            let p = palet(ui);
+            ui.set_width(460.0);
+            tema::subjudul(ui, "Pulihkan data?");
+            ui.add(
+                egui::Label::new(
+                    RichText::new(pulih.path.display().to_string())
+                        .size(11.0)
+                        .color(p.teks2),
+                )
+                .truncate(),
+            );
+            ui.add_space(6.0);
+            match &pulih.info {
+                Err(e) => {
+                    ui.label(RichText::new(e).color(p.merah));
+                }
+                Ok(c) => {
+                    let ringkas = |i: &InfoCadangan| {
+                        [
+                            if i.nama.is_empty() {
+                                "(tanpa nama)".to_string()
+                            } else {
+                                i.nama.clone()
+                            },
+                            i.jenis
+                                .map(|j| j.label().to_string())
+                                .unwrap_or_else(|| "—".into()),
+                            format!("{} transaksi", i.transaksi),
+                            i.terakhir
+                                .map(crate::format::tanggal_panjang)
+                                .unwrap_or_else(|| "—".into()),
+                        ]
+                    };
+                    let kiri = sekarang.as_ref().and_then(|s| s.as_ref().ok()).map(ringkas);
+                    egui::Grid::new("banding-pulih")
+                        .num_columns(3)
+                        .spacing([16.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("");
+                            ui.label(RichText::new("Data saat ini").strong());
+                            ui.label(RichText::new("Isi cadangan").strong());
+                            ui.end_row();
+                            let kanan = ringkas(c);
+                            for (i, label) in ["Nama", "Jenis", "Transaksi", "Transaksi terakhir"]
+                                .iter()
+                                .enumerate()
+                            {
+                                ui.label(RichText::new(*label).color(p.teks2));
+                                ui.label(
+                                    kiri.as_ref()
+                                        .map(|k| k[i].clone())
+                                        .unwrap_or_else(|| "—".into()),
+                                );
+                                ui.label(&kanan[i]);
+                                ui.end_row();
+                            }
+                        });
+                    if let Some(Ok(s)) = &sekarang {
+                        let beda_id = matches!((&s.id, &c.id), (Some(a), Some(b)) if a != b);
+                        let beda_nama =
+                            !s.nama.is_empty() && !c.nama.is_empty() && s.nama != c.nama;
+                        if beda_id || beda_nama {
+                            ui.add_space(4.0);
+                            ui.label(
+                                RichText::new(format!(
+                                    "Cadangan ini milik ‘{}’, bukan ‘{}’.",
+                                    if c.nama.is_empty() {
+                                        "lembaga lain"
+                                    } else {
+                                        &c.nama
+                                    },
+                                    if s.nama.is_empty() {
+                                        "data saat ini"
+                                    } else {
+                                        &s.nama
+                                    }
+                                ))
+                                .color(p.oranye),
+                            );
+                        }
+                        if c.transaksi < s.transaksi {
+                            ui.label(
+                                RichText::new(format!(
+                                    "Cadangan berisi lebih sedikit transaksi ({} dari {}).",
+                                    c.transaksi, s.transaksi
+                                ))
+                                .color(p.oranye),
+                            );
+                        }
                     }
-                    if tema::tombol(ui, "Batal").clicked() {
-                        tutup = true;
-                    }
-                });
-            });
-            if lanjut {
-                let db = self.db.take().expect("database terbuka");
-                let cadangan_darurat = db.path().with_extension("sebelum-pulih.sqlite");
-                let _ = db.cadangkan(&cadangan_darurat);
-                let path_db = db.path().to_path_buf();
-                match db.pulihkan(&path) {
-                    Ok(db) => {
-                        self.db = Some(db);
-                        self.muat_ulang(&ctx);
-                        self.info("Data berhasil dipulihkan.");
-                    }
-                    Err(e) => {
-                        self.db = Db::buka(&path_db).ok();
-                        self.muat_ulang(&ctx);
-                        self.galat(e);
-                    }
+                    ui.add_space(4.0);
+                    tema::label_redup(
+                        ui,
+                        "Salinan data saat ini disimpan otomatis di folder Cadangan Otomatis.",
+                    );
                 }
             }
-            if lanjut || tutup {
-                self.ui_profil.pulihkan = None;
+            ui.add_space(8.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if pulih.info.is_ok() && tema::tombol_bahaya(ui, "", "Ganti Data").clicked() {
+                    lanjut = true;
+                }
+                if tema::tombol(ui, "", "Batal").clicked() {
+                    tutup = true;
+                }
+            });
+        });
+        if r.should_close() {
+            tutup = true;
+        }
+        if lanjut {
+            let path = pulih.path.clone();
+            self.pulih = None;
+            self.pulihkan(ctx, &path);
+        } else if tutup {
+            self.pulih = None;
+        }
+    }
+
+    fn pulihkan(&mut self, ctx: &egui::Context, sumber: &std::path::Path) {
+        let Some(db) = self.db.take() else { return };
+        match db.pulihkan(sumber) {
+            Ok((db, _darurat)) => {
+                self.db = Some(db);
+                self.reset_ui();
+                self.muat_ulang(ctx);
+                self.cek_penyiapan();
+                self.info(
+                    "Data berhasil dipulihkan. Data sebelumnya disimpan di Cadangan Otomatis.",
+                );
+            }
+            Err((db, pesan)) => {
+                self.db = db.or_else(|| Db::buka_bawaan().ok());
+                if self.db.is_none() {
+                    self.galat_db = Some(pesan.clone());
+                }
+                self.reset_ui();
+                self.muat_ulang(ctx);
+                self.galat(pesan);
             }
         }
     }
 
     fn cadangkan(&mut self) {
-        let nama = format!("my-digit-cadangan-{}.sqlite", hari_ini());
+        let nama = format!("{}-cadangan-{}.sqlite", slug(&self.profil.nama), hari_ini());
         let Some(path) = rfd::FileDialog::new()
             .set_file_name(&nama)
             .add_filter("SQLite", &["sqlite"])
@@ -642,6 +895,25 @@ impl MyDigitApp {
             Ok(()) => self.info(format!("Cadangan tersimpan: {}", path.display())),
             Err(e) => self.galat(format!("Gagal mencadangkan: {e}")),
         }
+    }
+}
+
+/// Nama berkas aman: huruf kecil ASCII, angka, dan `-`, maks. 40 karakter.
+fn slug(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('-') && !out.is_empty() {
+            out.push('-');
+        }
+    }
+    let out: String = out.trim_end_matches('-').chars().take(40).collect();
+    let out = out.trim_end_matches('-').to_string();
+    if out.is_empty() {
+        "my-digit".into()
+    } else {
+        out
     }
 }
 
@@ -657,6 +929,12 @@ impl eframe::App for MyDigitApp {
             return;
         }
         let ctx = ui.ctx().clone();
+        if self.ui_penyiapan.is_some() {
+            penyiapan::tampil(self, ui);
+            self.lembar_pulihkan(&ctx);
+            self.toast(&ctx);
+            return;
+        }
         self.sidebar(ui);
         let p = palet(ui);
         let frame = egui::Frame::new().fill(p.latar).inner_margin(Margin {
@@ -682,13 +960,14 @@ impl eframe::App for MyDigitApp {
                 });
         });
         transaksi::formulir(self, &ctx);
+        self.lembar_pulihkan(&ctx);
         self.toast(&ctx);
     }
 }
 
 // ---------- Komponen bersama ----------
 
-fn item_sidebar(ui: &mut egui::Ui, ikon: &str, label: &str, aktif: bool) -> egui::Response {
+fn item_sidebar(ui: &mut egui::Ui, simbol: &str, label: &str, aktif: bool) -> egui::Response {
     let p = palet(ui);
     let (rect, resp) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), 30.0), egui::Sense::click());
@@ -707,8 +986,8 @@ fn item_sidebar(ui: &mut egui::Ui, ikon: &str, label: &str, aktif: bool) -> egui
     ui.painter().text(
         rect.left_center() + Vec2::new(12.0, 0.0),
         egui::Align2::LEFT_CENTER,
-        ikon,
-        egui::FontId::proportional(14.0),
+        simbol,
+        ikon::font(17.0),
         warna_ikon,
     );
     ui.painter().text(
@@ -730,6 +1009,7 @@ pub fn pilih_bulan(ui: &mut egui::Ui, id: &str, b: &mut Bulan, boleh_setahun: bo
         BULAN[b.bulan as usize - 1].to_string()
     };
     egui::ComboBox::from_id_salt(id)
+        .icon(tema::ikon_dropdown)
         .selected_text(label)
         .width(120.0)
         .show_ui(ui, |ui| {
@@ -746,16 +1026,20 @@ pub fn pilih_bulan(ui: &mut egui::Ui, id: &str, b: &mut Bulan, boleh_setahun: bo
 
 pub fn pilih_tahun(ui: &mut egui::Ui, tahun: &mut i16) -> bool {
     let awal = *tahun;
-    // Di dalam tata letak kanan-ke-kiri, tombol "▶" harus digambar lebih dulu.
-    let mut tombol = [("◀", -1), ("▶", 1)];
+    // Di dalam tata letak kanan-ke-kiri, tombol "berikutnya" harus digambar lebih dulu.
+    let mut tombol = [
+        (ikon::CARET_LEFT, -1, "Tahun sebelumnya"),
+        (ikon::CARET_RIGHT, 1, "Tahun berikutnya"),
+    ];
     if ui.layout().prefer_right_to_left() {
         tombol.reverse();
     }
-    if ui.small_button(tombol[0].0).clicked() {
+    let p = palet(ui);
+    if tema::tombol_ikon(ui, tombol[0].0, tombol[0].2, p.aksen).clicked() {
         *tahun += tombol[0].1;
     }
     ui.label(RichText::new(awal.to_string()).strong());
-    if ui.small_button(tombol[1].0).clicked() {
+    if tema::tombol_ikon(ui, tombol[1].0, tombol[1].2, p.aksen).clicked() {
         *tahun += tombol[1].1;
     }
     *tahun != awal

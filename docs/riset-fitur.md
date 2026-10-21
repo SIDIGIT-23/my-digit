@@ -36,7 +36,7 @@ masjid, organisasi), dan bagaimana tiap kebutuhan diwujudkan di My Digit.
 | Buku (temuan 1, 2)        | **Laporan**: BKU, Buku Pembantu Kas, Bank, dan Pajak                   |
 | Anggaran (temuan 5)       | **Anggaran** per kategori per tahun, dan laporan Realisasi Anggaran    |
 | Rekap                     | Laporan Rekap per Kategori                                            |
-| Cetak & TTD (temuan 4)    | Ekspor PDF dengan kop lembaga, blok tanda tangan, dan footer My Digit; ekspor CSV untuk Excel |
+| Cetak & TTD (temuan 4)    | Ekspor PDF dengan kop lembaga, blok tanda tangan, dan footer My Digit; ekspor Excel (.xlsx) berformat |
 | Bukti (temuan 6)          | Cetak **kwitansi** per transaksi, lengkap dengan terbilang            |
 | Cash opname (temuan 7)    | **Pemeriksaan Kas**: hitung pecahan uang, selisih, cetak berita acara |
 | Data master               | **Akun Kas & Bank** (saldo awal, no. rekening), **Kategori** berkode   |

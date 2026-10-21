@@ -28,16 +28,14 @@ impl Default for State {
 pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
     let p = palet(ui);
+    let sub = format!(
+        "Susun anggaran tahunan ({}), lalu pantau realisasinya.",
+        app.instansi.istilah_anggaran
+    );
     ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            tema::judul(
-                ui,
-                "Anggaran",
-                "Susun anggaran tahunan (mis. RKAS), lalu pantau realisasinya.",
-            )
-        });
+        ui.vertical(|ui| tema::judul(ui, "Anggaran", &sub));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if tema::tombol_utama(ui, "Simpan Anggaran").clicked() {
+            if tema::tombol_utama(ui, "", "Simpan Anggaran").clicked() {
                 simpan(app, &ctx);
             }
             if pilih_tahun(ui, &mut app.ui_anggaran.tahun) {

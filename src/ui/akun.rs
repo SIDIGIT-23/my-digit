@@ -2,6 +2,7 @@
 
 use eframe::egui::{self, RichText};
 
+use super::ikon;
 use super::{MyDigitApp, pemisah, tema};
 use crate::format::{parse_rupiah, ribuan, rupiah};
 use crate::model::*;
@@ -33,6 +34,10 @@ struct FormKategori {
 }
 
 pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
+    let contoh_bank = match app.instansi.sumber_dana.first() {
+        Some(s) => format!("mis. Bank Riau Kepri — {s}"),
+        None => "mis. Bank Riau Kepri".to_string(),
+    };
     let ctx = ui.ctx().clone();
     let p = palet(ui);
     ui.horizontal(|ui| {
@@ -44,7 +49,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             )
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if tema::tombol_utama(ui, "+  Akun Baru").clicked() {
+            if tema::tombol_utama(ui, ikon::PLUS, "Akun Baru").clicked() {
                 app.ui_akun.akun = Some(FormAkun {
                     id: 0,
                     nama: String::new(),
@@ -70,12 +75,12 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             }
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(if a.jenis == JenisAkun::Bank {
-                        "🏦"
+                    ikon::rt(if a.jenis == JenisAkun::Bank {
+                        ikon::BANK
                     } else {
-                        "💵"
+                        ikon::MONEY
                     })
-                    .size(20.0)
+                    .size(22.0)
                     .color(p.aksen),
                 );
                 ui.vertical(|ui| {
@@ -89,10 +94,10 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                     tema::label_redup(ui, info);
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if tema::tombol_bahaya(ui, "Hapus").clicked() {
+                    if tema::tombol_bahaya(ui, ikon::TRASH, "Hapus").clicked() {
                         app.ui_akun.hapus_akun = Some(a.id);
                     }
-                    if tema::tombol(ui, "Ubah").clicked() {
+                    if tema::tombol(ui, ikon::PENCIL_SIMPLE, "Ubah").clicked() {
                         app.ui_akun.akun = Some(FormAkun {
                             id: a.id,
                             nama: a.nama.clone(),
@@ -129,7 +134,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 );
             });
             tema::baris_form(ui, "Nama akun", |ui| {
-                tema::isian(ui, &mut f.nama, "mis. Bank Riau Kepri — BOS")
+                tema::isian(ui, &mut f.nama, &contoh_bank)
             });
             if f.jenis == JenisAkun::Bank {
                 tema::baris_form(ui, "No. rekening", |ui| {
@@ -144,8 +149,8 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             }
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                simpan = tema::tombol_utama(ui, "Simpan").clicked();
-                tutup = tema::tombol(ui, "Batal").clicked();
+                simpan = tema::tombol_utama(ui, "", "Simpan").clicked();
+                tutup = tema::tombol(ui, "", "Batal").clicked();
             });
         });
         tutup |= r.should_close();
@@ -189,12 +194,21 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
-            tema::judul(ui, "Kategori", "Pengelompokan penerimaan dan pengeluaran, sesuaikan dengan kode rekening RKAS lembaga.")
+            let sub = format!(
+                "Pengelompokan penerimaan dan pengeluaran, sesuaikan dengan kode rekening {}.",
+                app.instansi.istilah_anggaran
+            );
+            tema::judul(ui, "Kategori", &sub)
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if tema::tombol_utama(ui, "+  Kategori Baru").clicked() {
-                app.ui_akun.kategori =
-                    Some(FormKategori { id: 0, kode: String::new(), nama: String::new(), arus: Arus::Keluar, galat: None });
+            if tema::tombol_utama(ui, ikon::PLUS, "Kategori Baru").clicked() {
+                app.ui_akun.kategori = Some(FormKategori {
+                    id: 0,
+                    kode: String::new(),
+                    nama: String::new(),
+                    arus: Arus::Keluar,
+                    galat: None,
+                });
             }
         });
     });
@@ -217,10 +231,11 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                     );
                     ui.label(&k.nama);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("🗑").on_hover_text("Hapus").clicked() {
+                        let p = palet(ui);
+                        if tema::tombol_ikon(ui, ikon::TRASH, "Hapus", p.merah).clicked() {
                             app.ui_akun.hapus_kategori = Some(k.id);
                         }
-                        if ui.small_button("✏").on_hover_text("Ubah").clicked() {
+                        if tema::tombol_ikon(ui, ikon::PENCIL_SIMPLE, "Ubah", p.teks2).clicked() {
                             app.ui_akun.kategori = Some(FormKategori {
                                 id: k.id,
                                 kode: k.kode.clone(),
@@ -276,8 +291,8 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             }
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                simpan = tema::tombol_utama(ui, "Simpan").clicked();
-                tutup = tema::tombol(ui, "Batal").clicked();
+                simpan = tema::tombol_utama(ui, "", "Simpan").clicked();
+                tutup = tema::tombol(ui, "", "Batal").clicked();
             });
         });
         tutup |= r.should_close();
@@ -326,10 +341,10 @@ fn konfirmasi(ctx: &egui::Context, id: &str, pertanyaan: &str) -> Option<bool> {
         tema::label_redup(ui, "Tindakan ini tidak dapat dibatalkan.");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if tema::tombol_bahaya(ui, "Hapus").clicked() {
+            if tema::tombol_bahaya(ui, "", "Hapus").clicked() {
                 hasil = Some(true);
             }
-            if tema::tombol(ui, "Batal").clicked() {
+            if tema::tombol(ui, "", "Batal").clicked() {
                 hasil = Some(false);
             }
         });

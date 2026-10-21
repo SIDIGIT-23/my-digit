@@ -1,7 +1,7 @@
 //! Penyusunan laporan: BKU, buku pembantu, rekap, dan realisasi anggaran.
 //!
 //! Setiap laporan menghasilkan [`Tabel`] yang sama, sehingga tampilan layar,
-//! ekspor PDF, dan ekspor CSV memakai satu sumber data.
+//! ekspor PDF, dan ekspor Excel memakai satu sumber data.
 
 use std::collections::HashMap;
 
@@ -10,16 +10,35 @@ use jiff::civil::Date;
 use crate::format::{ribuan, tanggal_panjang, tanggal_pendek};
 use crate::model::*;
 
+/// Jenis isi kolom, agar ekspor Excel menulis nilai bertipe (bukan teks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JenisKolom {
+    Teks,
+    /// Teks `dd/mm/yyyy`.
+    Tanggal,
+    /// Rupiah berformat ribuan, mis. `1.250.000`.
+    Uang,
+    /// Persen berformat `50,0%`.
+    Persen,
+}
+
 #[derive(Debug, Clone)]
 pub struct Kolom {
     pub nama: &'static str,
     /// Lebar relatif terhadap kolom lain.
     pub lebar: f32,
     pub kanan: bool,
+    pub jenis: JenisKolom,
 }
 
-const fn kol(nama: &'static str, lebar: f32, kanan: bool) -> Kolom {
-    Kolom { nama, lebar, kanan }
+const fn kol(nama: &'static str, lebar: f32, jenis: JenisKolom) -> Kolom {
+    let kanan = matches!(jenis, JenisKolom::Uang | JenisKolom::Persen);
+    Kolom {
+        nama,
+        lebar,
+        kanan,
+        jenis,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -273,13 +292,13 @@ impl Sumber<'_> {
             judul: judul.into(),
             subjudul: periode.label(),
             kolom: vec![
-                kol("Tanggal", 1.1, false),
-                kol("No. Bukti", 1.5, false),
-                kol("Kode", 0.6, false),
-                kol("Uraian", 4.0, false),
-                kol("Penerimaan", 1.4, true),
-                kol("Pengeluaran", 1.4, true),
-                kol("Saldo", 1.5, true),
+                kol("Tanggal", 1.1, JenisKolom::Tanggal),
+                kol("No. Bukti", 1.5, JenisKolom::Teks),
+                kol("Kode", 0.6, JenisKolom::Teks),
+                kol("Uraian", 4.0, JenisKolom::Teks),
+                kol("Penerimaan", 1.4, JenisKolom::Uang),
+                kol("Pengeluaran", 1.4, JenisKolom::Uang),
+                kol("Saldo", 1.5, JenisKolom::Uang),
             ],
             baris,
             total: Some(vec![
@@ -382,13 +401,13 @@ impl Sumber<'_> {
             judul: JenisLaporan::PembantuPajak.judul().into(),
             subjudul: periode.label(),
             kolom: vec![
-                kol("Tanggal", 1.1, false),
-                kol("No. Bukti", 1.5, false),
-                kol("Uraian", 4.0, false),
-                kol("Jenis", 0.9, false),
-                kol("Pungutan", 1.4, true),
-                kol("Setoran", 1.4, true),
-                kol("Saldo", 1.4, true),
+                kol("Tanggal", 1.1, JenisKolom::Tanggal),
+                kol("No. Bukti", 1.5, JenisKolom::Teks),
+                kol("Uraian", 4.0, JenisKolom::Teks),
+                kol("Jenis", 0.9, JenisKolom::Teks),
+                kol("Pungutan", 1.4, JenisKolom::Uang),
+                kol("Setoran", 1.4, JenisKolom::Uang),
+                kol("Saldo", 1.4, JenisKolom::Uang),
             ],
             baris,
             total: Some(vec![
@@ -444,9 +463,9 @@ impl Sumber<'_> {
             judul: JenisLaporan::RekapKategori.judul().into(),
             subjudul: periode.label(),
             kolom: vec![
-                kol("Kode", 0.8, false),
-                kol("Kategori", 5.0, false),
-                kol("Jumlah", 2.0, true),
+                kol("Kode", 0.8, JenisKolom::Teks),
+                kol("Kategori", 5.0, JenisKolom::Teks),
+                kol("Jumlah", 2.0, JenisKolom::Uang),
             ],
             baris,
             total: Some(vec![
@@ -499,12 +518,12 @@ impl Sumber<'_> {
             judul: JenisLaporan::RealisasiAnggaran.judul().into(),
             subjudul: format!("Tahun Anggaran {tahun}"),
             kolom: vec![
-                kol("Kode", 0.7, false),
-                kol("Kategori", 3.6, false),
-                kol("Anggaran", 1.6, true),
-                kol("Realisasi", 1.6, true),
-                kol("Sisa", 1.6, true),
-                kol("%", 0.8, true),
+                kol("Kode", 0.7, JenisKolom::Teks),
+                kol("Kategori", 3.6, JenisKolom::Teks),
+                kol("Anggaran", 1.6, JenisKolom::Uang),
+                kol("Realisasi", 1.6, JenisKolom::Uang),
+                kol("Sisa", 1.6, JenisKolom::Uang),
+                kol("%", 0.8, JenisKolom::Persen),
             ],
             baris,
             total: Some(vec![
@@ -530,37 +549,6 @@ pub fn persen(bagian: i64, total: i64) -> String {
     } else {
         format!("{:.1}%", bagian as f64 * 100.0 / total as f64).replace('.', ",")
     }
-}
-
-/// Tulis tabel sebagai CSV (pemisah `;`, UTF-8 dengan BOM) agar langsung
-/// terbaca rapi oleh Excel berbahasa Indonesia.
-pub fn ke_csv(t: &Tabel) -> String {
-    let sel = |s: &str| {
-        if s.contains([';', '"', '\n']) {
-            format!("\"{}\"", s.replace('"', "\"\""))
-        } else {
-            s.to_string()
-        }
-    };
-    let baris = |r: &[String]| r.iter().map(|s| sel(s)).collect::<Vec<_>>().join(";");
-    let mut out = String::from("\u{feff}");
-    out += &format!("{}\n{}\n", sel(&t.judul), sel(&t.subjudul));
-    out += &t
-        .kolom
-        .iter()
-        .map(|k| sel(k.nama))
-        .collect::<Vec<_>>()
-        .join(";");
-    out.push('\n');
-    for r in &t.baris {
-        out += &baris(r);
-        out.push('\n');
-    }
-    if let Some(total) = &t.total {
-        out += &baris(total);
-        out.push('\n');
-    }
-    out
 }
 
 #[cfg(test)]
@@ -713,20 +701,5 @@ mod tests {
         let atk = t.baris.iter().find(|r| r[0] == "5.2").unwrap();
         assert_eq!(atk[3], "110.000");
         assert_eq!(atk[5], "50,0%");
-    }
-
-    #[test]
-    fn csv_aman() {
-        let t = Tabel {
-            judul: "A;B".into(),
-            subjudul: String::new(),
-            kolom: vec![kol("X", 1.0, false)],
-            baris: vec![vec!["\"q\"".into()]],
-            total: None,
-            mendatar: false,
-        };
-        let csv = ke_csv(&t);
-        assert!(csv.contains("\"A;B\""));
-        assert!(csv.contains("\"\"\"q\"\"\""));
     }
 }

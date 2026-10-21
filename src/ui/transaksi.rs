@@ -1,9 +1,10 @@
 //! Halaman Transaksi: daftar, formulir, kwitansi.
 
 use eframe::egui::{self, RichText};
-use egui_extras::{Column, DatePickerButton, TableBuilder};
+use egui_extras::{Column, TableBuilder};
 use jiff::civil::Date;
 
+use super::ikon;
 use super::{Bulan, MyDigitApp, pilih_bulan, tema};
 use crate::format::{hari_ini, parse_rupiah, ribuan, rupiah, tanggal_pendek};
 use crate::model::*;
@@ -56,7 +57,7 @@ pub fn buka_baru(app: &mut MyDigitApp, jenis: JenisTransaksi) {
     let tanggal = hari_ini();
     let no = app
         .db()
-        .nomor_bukti_berikutnya(jenis, tanggal.year())
+        .nomor_bukti_berikutnya(app.instansi.awalan(jenis), tanggal.year())
         .unwrap_or_default();
     let tunai = app
         .akun
@@ -137,7 +138,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             )
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if tema::tombol_utama(ui, "+  Transaksi Baru").clicked() {
+            if tema::tombol_utama(ui, ikon::PLUS, "Transaksi Baru").clicked() {
                 buka_baru(app, JenisTransaksi::Masuk);
             }
         });
@@ -160,7 +161,11 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.add(
             egui::TextEdit::singleline(&mut st.cari)
-                .hint_text("🔍 Cari uraian, nomor bukti, pihak…")
+                .hint_text(tema::petunjuk_ikon(
+                    ui,
+                    ikon::MAGNIFYING_GLASS,
+                    "Cari uraian, nomor bukti, pihak…",
+                ))
                 .desired_width(240.0),
         );
     });
@@ -199,20 +204,24 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         ui.label(RichText::new(format!("Keluar {}", rupiah(k))).color(p.merah));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(terpilih.is_some(), |ui| {
-                if tema::tombol_bahaya(ui, "Hapus").clicked() {
+                if tema::tombol_bahaya(ui, ikon::TRASH, "Hapus").clicked() {
                     app.ui_transaksi.hapus = terpilih.as_ref().map(|t| t.id);
                 }
                 let bisa_kwitansi = terpilih
                     .as_ref()
                     .is_some_and(|t| t.jenis != JenisTransaksi::Transfer);
                 if ui
-                    .add_enabled(bisa_kwitansi, egui::Button::new("🖨  Kwitansi"))
+                    .add_enabled(
+                        bisa_kwitansi,
+                        egui::Button::new((ikon::rt(ikon::PRINTER), "Kwitansi"))
+                            .min_size(egui::vec2(0.0, 28.0)),
+                    )
                     .clicked()
                     && let Some(t) = &terpilih
                 {
                     cetak_kwitansi(app, t);
                 }
-                if tema::tombol(ui, "✏  Ubah").clicked()
+                if tema::tombol(ui, ikon::PENCIL_SIMPLE, "Ubah").clicked()
                     && let Some(t) = &terpilih
                 {
                     buka_edit(app, t);
@@ -226,7 +235,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         if daftar.is_empty() {
             ui.add_space(30.0);
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new("🧾").size(32.0).color(p.teks2));
+                ui.label(ikon::rt(ikon::RECEIPT).size(36.0).color(p.teks2));
                 tema::label_redup(ui, "Tidak ada transaksi pada periode ini.");
             });
             ui.add_space(30.0);
@@ -354,12 +363,12 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             tema::label_redup(ui, "Tindakan ini tidak dapat dibatalkan.");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if tema::tombol_bahaya(ui, "Hapus").clicked() {
+                if tema::tombol_bahaya(ui, "", "Hapus").clicked() {
                     app.ubah(ctx, "Transaksi dihapus.", |db| db.hapus_transaksi(id));
                     app.ui_transaksi.terpilih = None;
                     selesai = true;
                 }
-                if tema::tombol(ui, "Batal").clicked() {
+                if tema::tombol(ui, "", "Batal").clicked() {
                     selesai = true;
                 }
             });
@@ -374,6 +383,8 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
     };
     let mut tutup = false;
     let mut simpan = false;
+    let instansi = app.instansi.clone();
+    let pajak_tampil = app.pajak_tampil();
     let p = egui::Modal::new(egui::Id::unique("form-transaksi"))
         .show(ctx, |ui| {
             let p = palet(ui);
@@ -400,17 +411,21 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             ui.add_space(6.0);
 
             tema::baris_form(ui, "Tanggal", |ui| {
-                ui.add(DatePickerButton::new(&mut f.tanggal).id_salt("tgl-transaksi").format("%d/%m/%Y"));
+                tema::pilih_tanggal(ui, "tgl-transaksi", &mut f.tanggal);
             });
             // Perbarui nomor bukti otomatis bila jenis atau tahun berubah.
             if f.id == 0 && f.no_bukti == f.bukti_otomatis {
-                let baru = app.db().nomor_bukti_berikutnya(f.jenis, f.tanggal.year()).unwrap_or_default();
+                let baru = app
+                    .db()
+                    .nomor_bukti_berikutnya(instansi.awalan(f.jenis), f.tanggal.year())
+                    .unwrap_or_default();
                 if baru != f.bukti_otomatis {
                     f.no_bukti = baru.clone();
                     f.bukti_otomatis = baru;
                 }
             }
-            tema::baris_form(ui, "No. bukti", |ui| tema::isian(ui, &mut f.no_bukti, "BKM-2026-0001"));
+            let contoh_bukti = format!("{}-{}-0001", instansi.awalan(f.jenis), f.tanggal.year());
+            tema::baris_form(ui, "No. bukti", |ui| tema::isian(ui, &mut f.no_bukti, &contoh_bukti));
 
             let label_akun = match f.jenis {
                 JenisTransaksi::Masuk => "Masuk ke akun",
@@ -427,7 +442,7 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
                         .kategori(f.kategori_id)
                         .map(|k| format!("{} {}", k.kode, k.nama))
                         .unwrap_or_else(|| "Pilih kategori…".into());
-                    egui::ComboBox::from_id_salt("kategori").selected_text(teks).width(340.0).show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt("kategori").icon(tema::ikon_dropdown).selected_text(teks).width(340.0).show_ui(ui, |ui| {
                         for k in app.kategori.iter().filter(|k| k.arus == arus) {
                             ui.selectable_value(&mut f.kategori_id, Some(k.id), format!("{}  {}", k.kode, k.nama));
                         }
@@ -440,10 +455,11 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
                 tema::baris_form(ui, label, |ui| tema::isian(ui, &mut f.pihak, "Nama orang / toko / instansi"));
                 tema::baris_form(ui, "Sumber dana", |ui| {
                     ui.horizontal(|ui| {
-                        ui.add(egui::TextEdit::singleline(&mut f.sumber_dana).hint_text("mis. BOS Reguler").desired_width(200.0));
-                        for s in ["BOS", "Komite", "Swadaya"] {
+                        let petunjuk = instansi.sumber_dana.first().map(|s| format!("mis. {s}")).unwrap_or_default();
+                        ui.add(egui::TextEdit::singleline(&mut f.sumber_dana).hint_text(petunjuk).desired_width(200.0));
+                        for s in &instansi.sumber_dana {
                             if ui.small_button(s).clicked() {
-                                f.sumber_dana = s.into();
+                                f.sumber_dana = s.clone();
                             }
                         }
                     });
@@ -451,9 +467,11 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             }
             tema::baris_form(ui, "Jumlah (Rp)", |ui| tema::isian_rupiah(ui, &mut f.jumlah, 200.0));
 
-            if f.jenis == JenisTransaksi::Keluar {
+            let ada_pajak = f.setor.is_some() || f.pajak.iter().any(|s| !s.is_empty());
+            if f.jenis == JenisTransaksi::Keluar && (pajak_tampil || ada_pajak) {
                 ui.add_space(4.0);
                 egui::CollapsingHeader::new("Pajak")
+                    .icon(tema::ikon_lipat)
                     .default_open(f.setor.is_some() || f.pajak.iter().any(|s| !s.is_empty()))
                     .show(ui, |ui| {
                         let mut setor = f.setor.is_some();
@@ -461,7 +479,7 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
                         if setor {
                             let mut jenis = f.setor.unwrap_or(JenisPajak::Ppn);
                             tema::baris_form(ui, "Jenis pajak disetor", |ui| {
-                                egui::ComboBox::from_id_salt("setor").selected_text(jenis.label()).show_ui(ui, |ui| {
+                                egui::ComboBox::from_id_salt("setor").icon(tema::ikon_dropdown).selected_text(jenis.label()).show_ui(ui, |ui| {
                                     for pj in JenisPajak::SEMUA {
                                         ui.selectable_value(&mut jenis, pj, pj.label());
                                     }
@@ -490,10 +508,10 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if tema::tombol_utama(ui, "Simpan").clicked() {
+                    if tema::tombol_utama(ui, "", "Simpan").clicked() {
                         simpan = true;
                     }
-                    if tema::tombol(ui, "Batal").clicked() {
+                    if tema::tombol(ui, "", "Batal").clicked() {
                         tutup = true;
                     }
                 });
@@ -536,6 +554,7 @@ fn pilih_akun(ui: &mut egui::Ui, id: &str, akun: &[Akun], terpilih: &mut i64) {
         .map(|a| a.nama.clone())
         .unwrap_or_else(|| "Pilih akun…".into());
     egui::ComboBox::from_id_salt(id)
+        .icon(tema::ikon_dropdown)
         .selected_text(teks)
         .width(340.0)
         .show_ui(ui, |ui| {

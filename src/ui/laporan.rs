@@ -1,12 +1,14 @@
-//! Halaman Laporan: pratinjau dan ekspor PDF / CSV.
+//! Halaman Laporan: pratinjau dan ekspor PDF / Excel.
 
 use eframe::egui::{self, RichText};
-use egui_extras::{Column, DatePickerButton, TableBuilder};
+use egui_extras::{Column, TableBuilder};
 use jiff::civil::Date;
 
+use super::ikon;
 use super::{Bulan, MyDigitApp, pilih_bulan, pilih_tahun, tema};
+use crate::excel;
 use crate::format::hari_ini;
-use crate::laporan::{JenisLaporan, Periode, Tabel, ke_csv};
+use crate::laporan::{JenisLaporan, Periode, Tabel};
 use crate::model::JenisAkun;
 use crate::pdf;
 use tema::palet;
@@ -49,7 +51,15 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     );
 
     // Pilihan jenis laporan sebagai kisi kartu kecil (3 kolom).
-    for baris in JenisLaporan::SEMUA.chunks(3) {
+    let pajak_tampil = app.pajak_tampil();
+    let jenis_tampil: Vec<JenisLaporan> = JenisLaporan::SEMUA
+        .into_iter()
+        .filter(|j| pajak_tampil || *j != JenisLaporan::PembantuPajak)
+        .collect();
+    if !jenis_tampil.contains(&app.ui_laporan.jenis) {
+        app.ui_laporan.jenis = JenisLaporan::Bku;
+    }
+    for baris in jenis_tampil.chunks(3) {
         ui.columns(3, |c| {
             for (ui, j) in c.iter_mut().zip(baris) {
                 let aktif = app.ui_laporan.jenis == *j;
@@ -116,17 +126,9 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                     pilih_bulan(ui, "laporan-bulan", &mut st.bulan, true);
                 }
                 ModePeriode::Rentang => {
-                    ui.add(
-                        DatePickerButton::new(&mut st.mulai)
-                            .id_salt("lap-mulai")
-                            .format("%d/%m/%Y"),
-                    );
+                    tema::pilih_tanggal(ui, "lap-mulai", &mut st.mulai);
                     ui.label("s.d.");
-                    ui.add(
-                        DatePickerButton::new(&mut st.sampai)
-                            .id_salt("lap-sampai")
-                            .format("%d/%m/%Y"),
-                    );
+                    tema::pilih_tanggal(ui, "lap-sampai", &mut st.sampai);
                 }
             }
         }
@@ -138,6 +140,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 .map(|b| b.1.clone())
                 .unwrap_or_else(|| "Tidak ada akun bank".into());
             egui::ComboBox::from_id_salt("lap-bank")
+                .icon(tema::ikon_dropdown)
                 .selected_text(nama)
                 .show_ui(ui, |ui| {
                     for (id, n) in &bank {
@@ -177,17 +180,19 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 tema::label_redup(ui, &tabel.subjudul);
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if tema::tombol_utama(ui, "⬇  Ekspor PDF").clicked() {
+                if tema::tombol_utama(ui, ikon::FILE_PDF, "Ekspor PDF").clicked() {
                     let bytes =
                         pdf::laporan(&app.profil, app.gambar_pdf().as_ref(), &tabel, hari_ini());
                     app.simpan_berkas(&nama_berkas(&tabel, "pdf"), "pdf", &bytes);
                 }
-                if tema::tombol(ui, "Ekspor CSV (Excel)").clicked() {
-                    app.simpan_berkas(
-                        &nama_berkas(&tabel, "csv"),
-                        "csv",
-                        ke_csv(&tabel).as_bytes(),
-                    );
+                if tema::tombol(ui, ikon::FILE_XLS, "Ekspor Excel").clicked() {
+                    let logo = app.path_logo_lembaga();
+                    match excel::laporan(&app.profil, logo.as_deref(), &tabel, hari_ini()) {
+                        Ok(bytes) => {
+                            app.simpan_berkas(&nama_berkas(&tabel, "xlsx"), "xlsx", &bytes)
+                        }
+                        Err(e) => app.galat(e),
+                    }
                 }
             });
         });

@@ -6,7 +6,9 @@
 
 mod branding;
 mod db;
+mod excel;
 mod format;
+mod instansi;
 mod laporan;
 mod model;
 mod pdf;

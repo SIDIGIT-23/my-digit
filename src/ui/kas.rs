@@ -1,9 +1,9 @@
 //! Halaman Pemeriksaan Kas (cash opname).
 
 use eframe::egui::{self, RichText};
-use egui_extras::DatePickerButton;
 use jiff::civil::Date;
 
+use super::ikon;
 use super::{MyDigitApp, tema};
 use crate::format::{hari_ini, ribuan, rupiah};
 use crate::model::JenisAkun;
@@ -58,11 +58,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
 
     tema::kartu(ui, |ui| {
         tema::baris_form(ui, "Tanggal pemeriksaan", |ui| {
-            ui.add(
-                DatePickerButton::new(&mut st.tanggal)
-                    .id_salt("tgl-opname")
-                    .format("%d/%m/%Y"),
-            );
+            tema::pilih_tanggal(ui, "tgl-opname", &mut st.tanggal);
         });
         tema::baris_form(ui, "Akun kas", |ui| {
             let nama = tunai
@@ -71,6 +67,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 .map(|t| t.1.clone())
                 .unwrap_or_default();
             egui::ComboBox::from_id_salt("akun-opname")
+                .icon(tema::ikon_dropdown)
                 .selected_text(nama)
                 .show_ui(ui, |ui| {
                     for (id, n) in &tunai {
@@ -99,7 +96,9 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 tema::subjudul(ui, "Rincian Uang Fisik");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("Kosongkan").clicked() {
+                    if tema::tombol_ikon(ui, ikon::ERASER, "Kosongkan semua isian", p.teks2)
+                        .clicked()
+                    {
                         st.jumlah = [0; PECAHAN.len()];
                     }
                 });
@@ -151,12 +150,19 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 });
             }
             ui.add_space(4.0);
-            let status = match selisih {
-                0 => "✔  Kas sesuai dengan buku.".to_string(),
-                s if s > 0 => format!("Kelebihan kas {}", rupiah(s)),
-                s => format!("Kekurangan kas {}", rupiah(-s)),
+            let (simbol, status) = match selisih {
+                0 => (ikon::CHECK_CIRCLE, "Kas sesuai dengan buku.".to_string()),
+                s if s > 0 => (ikon::WARNING_CIRCLE, format!("Kelebihan kas {}", rupiah(s))),
+                s => (
+                    ikon::WARNING_CIRCLE,
+                    format!("Kekurangan kas {}", rupiah(-s)),
+                ),
             };
-            ui.label(RichText::new(status).color(if selisih == 0 { p.hijau } else { p.oranye }));
+            let warna = if selisih == 0 { p.hijau } else { p.oranye };
+            ui.horizontal(|ui| {
+                ui.label(ikon::rt(simbol).size(16.0).color(warna));
+                ui.label(RichText::new(status).color(warna));
+            });
             ui.add_space(8.0);
             tema::label_redup(ui, "Keterangan (opsional)");
             ui.add(
@@ -166,7 +172,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                     .hint_text("mis. selisih karena uang kembalian belum dicatat"),
             );
             ui.add_space(8.0);
-            if tema::tombol_utama(ui, "🖨  Cetak Berita Acara (PDF)").clicked() {
+            if tema::tombol_utama(ui, ikon::PRINTER, "Cetak Berita Acara (PDF)").clicked() {
                 let st = &app.ui_kas;
                 let nama_akun = app.nama_akun(st.akun_id).to_string();
                 let data = DataOpname {

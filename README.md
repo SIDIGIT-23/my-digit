@@ -17,8 +17,11 @@
 
 ## Tentang
 
-**My Digit** membantu bendahara sekolah, yayasan, masjid, atau organisasi
-mencatat keuangan dan menyusun laporan yang siap ditandatangani. Fitur-fiturnya
+**My Digit** membantu bendahara sekolah, organisasi, instansi pemerintah,
+maupun lembaga (yayasan, masjid, LSM) mencatat keuangan dan menyusun laporan
+yang siap ditandatangani. Saat pertama dibuka, pengguna memilih **Masuk
+sebagai** Sekolah, Organisasi, Instansi, atau Lembaga; pilihan ini menyiapkan
+kategori, istilah anggaran, jabatan, dan isian identitas yang sesuai. Fitur-fiturnya
 disusun dari riset kebutuhan bendahara (lihat [docs/riset-fitur.md](docs/riset-fitur.md)).
 
 - **Pembuat:** SIDIGIT-23 — Proyek IT SMP Negeri 23 Dumai
@@ -32,14 +35,20 @@ disusun dari riset kebutuhan bendahara (lihat [docs/riset-fitur.md](docs/riset-f
 | **Ringkasan** | Saldo kas & bank, pemasukan/pengeluaran bulan ini, pajak belum disetor, grafik arus kas 6 bulan, transaksi terbaru |
 | **Transaksi** | Pemasukan, pengeluaran, transfer antar akun; nomor bukti otomatis (BKM/BKK/TRF); pungutan & setoran PPN/PPh 21/22/23; cetak kwitansi dengan terbilang |
 | **Anggaran** | Target penerimaan dan anggaran belanja per kategori per tahun (mis. RKAS), dengan capaian realisasi |
-| **Laporan** | Buku Kas Umum, Buku Pembantu Kas Tunai, Bank, dan Pajak, Rekap per Kategori, Realisasi Anggaran; ekspor **PDF** (kop + logo lembaga + tanda tangan) dan **CSV** untuk Excel |
+| **Laporan** | Buku Kas Umum, Buku Pembantu Kas Tunai, Bank, dan Pajak, Rekap per Kategori, Realisasi Anggaran; ekspor **PDF** dan **Excel (.xlsx)** yang sudah diformat (kop + logo lembaga, tabel, total, tanda tangan) |
 | **Pemeriksaan Kas** | Hitung uang fisik per pecahan, bandingkan dengan saldo buku, cetak Berita Acara Pemeriksaan Kas |
 | **Akun Kas & Bank / Kategori** | Data master dengan saldo awal, no. rekening, dan kode kategori |
-| **Profil Lembaga** | Nama, alamat, logo lembaga, pimpinan & bendahara beserta NIP |
-| **Pengaturan** | Tema (ikuti sistem / terang / gelap), cadangkan & pulihkan data |
+| **Masuk sebagai** | Layar pertama: pilih Sekolah, Organisasi, Instansi, atau Lembaga — kategori bawaan, istilah anggaran (RKAS/DPA/...), jabatan, label nomor induk, sumber dana, dan fitur pajak menyesuaikan |
+| **Profil {Jenis}** | Identitas dan instansi induk untuk kop, nomor identitas (NPSN, Kode Satker, No. SK, NPWP), penanda tangan beserta nomor induk, pengaturan pembukuan (pajak, istilah, sumber dana, awalan nomor bukti), logo; ubah jenis kapan saja tanpa menghapus data |
+| **Tampilan & Data** | Tema (ikuti sistem / terang / gelap), cadangkan & pulihkan data dengan salinan pengaman otomatis |
 
 Tampilan mengikuti gaya aplikasi desktop Apple: sidebar, kartu bersudut bulat,
-huruf sistem (SF Pro di macOS, Segoe UI di Windows), dan mode gelap.
+huruf sistem (SF Pro di macOS, Segoe UI di Windows), ikon garis, dan mode gelap.
+
+<p align="center">
+  <img src="docs/gambar/masuk-sebagai.png" alt="Layar Masuk sebagai" width="49%">
+  <img src="docs/gambar/profil.png" alt="Profil Sekolah" width="49%">
+</p>
 
 <p align="center">
   <img src="docs/gambar/laporan.png" alt="Laporan" width="49%">
@@ -72,13 +81,22 @@ Semua teks identitas ada di [`src/branding.rs`](src/branding.rs).
 - **Logo lembaga pengguna:** dipilih di menu **Profil Lembaga**, tampil di kop
   laporan, dan terpisah dari logo aplikasi.
 
+## Ikon
+
+Ikon antarmuka memakai [Phosphor Icons](https://phosphoricons.com) varian
+Regular (lisensi MIT, lihat [`assets/fonts/LICENSE-Phosphor.txt`](assets/fonts/LICENSE-Phosphor.txt)).
+Font-nya ditanam ke aplikasi dari `assets/fonts/Phosphor.ttf`, dan daftar ikon
+yang dipakai ada di [`src/ui/ikon.rs`](src/ui/ikon.rs).
+
 ## Struktur kode
 
 | Berkas | Isi |
 | --- | --- |
-| `src/model.rs` | Struktur data (akun, kategori, transaksi, pajak, profil) |
-| `src/db.rs` | Penyimpanan SQLite, data awal, cadangan |
-| `src/laporan.rs` | Perhitungan saldo, BKU, buku pembantu, rekap, realisasi, CSV |
+| `src/model.rs` | Struktur data (akun, kategori, transaksi, pajak, profil, pengaturan instansi) |
+| `src/instansi.rs` | Empat jenis "Masuk sebagai" dan templat bawaannya |
+| `src/db.rs` | Penyimpanan SQLite, migrasi format data, penyiapan, cadangan & pemulihan |
+| `src/laporan.rs` | Perhitungan saldo, BKU, buku pembantu, rekap, realisasi |
+| `src/excel.rs` | Ekspor Excel (.xlsx) berformat dan siap cetak |
 | `src/pdf.rs` | Ekspor PDF: laporan, kwitansi, berita acara kas |
 | `src/format.rs` | Format rupiah, tanggal Indonesia, terbilang |
 | `src/ui/` | Antarmuka: tema Apple-style dan setiap halaman |

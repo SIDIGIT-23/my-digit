@@ -1,6 +1,6 @@
 [package]
 name = "my-digit"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["SIDIGIT-23 — Proyek IT SMP Negeri 23 Dumai"]
 description = "My Digit — aplikasi bendahara keuangan lembaga, made by SIDIGIT-23 Proyek IT SMP Negeri 23 Dumai"
@@ -21,6 +21,7 @@ miniz_oxide = "0.9.1"
 pdf-writer = "0.15.0"
 rfd = "0.17.2"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+rust_xlsxwriter = "0.101.0"
 
 # Ikon dan info versi pada my-digit.exe (hanya saat build di Windows).
 [target.'cfg(windows)'.build-dependencies]
@@ -45,7 +46,7 @@ before-packaging-command = "cargo build --release"
 out-dir = "dist"
 binaries-dir = "target/release"
 binaries = [{ path = "my-digit", main = true }]
-icons = ["assets/icon.icns", "assets/icon.ico", "assets/icon-512.png"]
+icons = ["assets/icon.icns", "assets/icon.ico", "assets/icon-macos.png"]
 
 [package.metadata.packager.macos]
 minimum-system-version = "11.0"

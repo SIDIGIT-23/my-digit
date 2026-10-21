@@ -4,6 +4,8 @@
 
 use jiff::civil::Date;
 
+pub use crate::instansi::JenisInstansi;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JenisAkun {
     Tunai,
@@ -239,9 +241,105 @@ pub struct ProfilLembaga {
     pub email: String,
     pub jabatan_pimpinan: String,
     pub nama_pimpinan: String,
+    /// Nomor induk pimpinan (NIP, NIY, ...; labelnya di `label_nomor_pimpinan`).
     pub nip_pimpinan: String,
     pub nama_bendahara: String,
+    /// Nomor induk bendahara (labelnya di `label_nomor_bendahara`).
     pub nip_bendahara: String,
     /// Nama berkas logo lembaga di folder data aplikasi.
     pub logo: Option<String>,
+    /// Instansi induk di atas nama pada kop, maks. 2 baris (dipisah baris baru).
+    pub induk: String,
+    pub jabatan_bendahara: String,
+    pub label_nomor_pimpinan: String,
+    pub label_nomor_bendahara: String,
+    /// Nomor identitas lembaga, mis. NPSN / Kode Satker / NPWP.
+    pub id1_label: String,
+    pub id1_nomor: String,
+    pub id2_label: String,
+    pub id2_nomor: String,
+}
+
+impl ProfilLembaga {
+    /// `"NIP. 1970…"`; nomor saja bila label kosong; `""` bila nomor kosong.
+    pub fn baris_nomor(label: &str, nomor: &str) -> String {
+        let (label, nomor) = (label.trim(), nomor.trim());
+        match (label.is_empty(), nomor.is_empty()) {
+            (_, true) => String::new(),
+            (true, false) => nomor.to_string(),
+            (false, false) => format!("{label}. {nomor}"),
+        }
+    }
+
+    /// `"NPSN 10404123 · NSM 1212…"`; pasangan bernomor kosong dilewati.
+    pub fn baris_identitas(&self) -> String {
+        [
+            (&self.id1_label, &self.id1_nomor),
+            (&self.id2_label, &self.id2_nomor),
+        ]
+        .into_iter()
+        .filter(|(_, n)| !n.trim().is_empty())
+        .map(|(l, n)| {
+            if l.trim().is_empty() {
+                n.trim().to_string()
+            } else {
+                format!("{} {}", l.trim(), n.trim())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
+    }
+
+    /// Maks. 2 baris instansi induk yang tidak kosong, huruf kapital.
+    pub fn baris_induk(&self) -> Vec<String> {
+        self.induk
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .take(2)
+            .map(str::to_uppercase)
+            .collect()
+    }
+}
+
+/// Pengaturan pembukuan per instansi.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PengaturanInstansi {
+    pub jenis: JenisInstansi,
+    /// Label bebas, mis. "SMP Negeri" atau "Masjid".
+    pub subjenis: String,
+    /// Tampilkan isian pajak, Buku Pembantu Pajak, dan ubin pajak.
+    pub pajak: bool,
+    pub istilah_anggaran: String,
+    /// Tombol cepat sumber dana di formulir transaksi.
+    pub sumber_dana: Vec<String>,
+    pub awalan_masuk: String,
+    pub awalan_keluar: String,
+    pub awalan_transfer: String,
+}
+
+impl Default for PengaturanInstansi {
+    /// Sama dengan perilaku My Digit v0.2 (sekolah, BKM/BKK/TRF).
+    fn default() -> Self {
+        Self {
+            jenis: JenisInstansi::Sekolah,
+            subjenis: String::new(),
+            pajak: true,
+            istilah_anggaran: "RKAS".into(),
+            sumber_dana: vec!["BOS".into(), "Komite".into(), "Swadaya".into()],
+            awalan_masuk: JenisTransaksi::Masuk.awalan_bukti().into(),
+            awalan_keluar: JenisTransaksi::Keluar.awalan_bukti().into(),
+            awalan_transfer: JenisTransaksi::Transfer.awalan_bukti().into(),
+        }
+    }
+}
+
+impl PengaturanInstansi {
+    pub fn awalan(&self, j: JenisTransaksi) -> &str {
+        match j {
+            JenisTransaksi::Masuk => &self.awalan_masuk,
+            JenisTransaksi::Keluar => &self.awalan_keluar,
+            JenisTransaksi::Transfer => &self.awalan_transfer,
+        }
+    }
 }

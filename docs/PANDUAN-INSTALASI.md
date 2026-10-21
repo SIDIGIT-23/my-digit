@@ -29,8 +29,22 @@ Semua data tersimpan di satu berkas database:
 | Windows | `%APPDATA%\SIDIGIT-23\My Digit\data\my-digit.sqlite`           |
 | macOS   | `~/Library/Application Support/id.SIDIGIT-23.My-Digit/my-digit.sqlite` |
 
-Gunakan menu **Pengaturan → Cadangkan Data** secara berkala. Berkas cadangan
-dari Windows dapat dipulihkan di macOS, dan sebaliknya.
+Di folder yang sama ada folder `cadangan-otomatis/` berisi salinan pengaman
+yang dibuat aplikasi sendiri: sebelum data lama diperbarui ke format baru, dan
+sebelum data diganti lewat **Pulihkan dari Cadangan**. Salinan ini tidak dihapus
+otomatis; hapus sendiri yang sudah tidak diperlukan.
+
+Gunakan menu **Tampilan & Data → Cadangkan Data** secara berkala. Berkas
+cadangan dari Windows dapat dipulihkan di macOS, dan sebaliknya. Simpan
+cadangan di luar folder data (mis. Dokumen atau flashdisk).
+
+### Memperbarui dari My Digit 0.2
+Saat dibuka pertama kali, My Digit 0.3 memperbarui format data secara otomatis
+setelah membuat salinan pengaman. Semua transaksi, kategori, dan profil tetap,
+dan laporan tetap tercetak sama. Data yang sudah dipakai langsung masuk sebagai
+Sekolah (atau Organisasi/Lembaga bila jabatan pimpinannya "Ketua"/"Ketua
+Yayasan"); jenisnya bisa diubah di **Profil → Ubah…**. Berkas yang sudah
+diperbarui tetap dapat dibuka oleh My Digit 0.2.
 
 ## Untuk pengembang
 
