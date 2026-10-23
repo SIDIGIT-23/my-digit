@@ -74,6 +74,11 @@ fn huruf_sistem() -> Option<Vec<u8>> {
             "C:\\Windows\\Fonts\\segoeui.ttf",
             "C:\\Windows\\Fonts\\arial.ttf",
         ]
+    } else if cfg!(target_os = "android") {
+        &[
+            "/system/fonts/Roboto-Regular.ttf",
+            "/system/fonts/DroidSans.ttf",
+        ]
     } else {
         &["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
     };
@@ -155,11 +160,42 @@ pub fn pasang(ctx: &egui::Context) {
 
 // ---------- Komponen ----------
 
+/// Layar sempit (ponsel): tata letak tab bawah dan isian bertumpuk.
+pub fn sempit(ui: &Ui) -> bool {
+    ui.ctx().content_rect().width() < 700.0
+}
+
+/// Baris kepala halaman (judul + tombol kanan). Di layar sempit tombol
+/// pindah ke bawah judul agar tidak menumpuk.
+pub fn baris_kepala<R>(ui: &mut Ui, isi: impl FnOnce(&mut Ui) -> R) -> R {
+    if sempit(ui) {
+        ui.vertical(isi).inner
+    } else {
+        ui.horizontal(isi).inner
+    }
+}
+
+/// Kelompok tombol rata kanan di baris kepala, dibatasi satu baris agar
+/// tidak melebar ke seluruh tinggi halaman saat kepala ditumpuk.
+pub fn kanan<R>(ui: &mut Ui, isi: impl FnOnce(&mut Ui) -> R) -> R {
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), isi)
+            .inner
+    })
+    .inner
+}
+
+/// Lebar dialog yang muat di layar, maksimal `ideal`.
+pub fn lebar_modal(ui: &Ui, ideal: f32) -> f32 {
+    ideal.min(ui.ctx().content_rect().width() - 56.0).max(240.0)
+}
+
 /// Judul besar halaman, seperti di aplikasi bawaan macOS.
 pub fn judul(ui: &mut Ui, judul: &str, sub: &str) {
     let p = palet(ui);
     ui.add_space(4.0);
-    ui.label(RichText::new(judul).size(26.0).strong().color(p.teks));
+    let ukuran = if sempit(ui) { 22.0 } else { 26.0 };
+    ui.label(RichText::new(judul).size(ukuran).strong().color(p.teks));
     if !sub.is_empty() {
         ui.label(RichText::new(sub).color(p.teks2));
     }
@@ -352,7 +388,8 @@ pub fn ubin(ui: &mut Ui, ikon: &str, label: &str, nilai: &str, warna: Color32) {
                 ui.label(ikon::rt(ikon).size(15.0).color(warna));
                 ui.add(egui::Label::new(RichText::new(label).color(p.teks2)).truncate());
             });
-            ui.add(egui::Label::new(RichText::new(nilai).size(21.0).strong()).truncate());
+            let ukuran = if sempit(ui) { 16.0 } else { 21.0 };
+            ui.add(egui::Label::new(RichText::new(nilai).size(ukuran).strong()).truncate());
         });
     });
 }
@@ -374,8 +411,18 @@ pub fn bilah(ui: &mut Ui, rasio: f32, warna: Color32, label: &str) {
 }
 
 /// Baris isian formulir: label di kiri, kontrol di kanan.
+/// Di layar sempit label ditaruh di atas isian.
 pub fn baris_form<R>(ui: &mut Ui, label: &str, isi: impl FnOnce(&mut Ui) -> R) -> R {
     let p = palet(ui);
+    if sempit(ui) {
+        return ui
+            .vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.label(RichText::new(label).size(12.0).color(p.teks2));
+                isi(ui)
+            })
+            .inner;
+    }
     ui.horizontal(|ui| {
         ui.add_sized(
             Vec2::new(150.0, 28.0),

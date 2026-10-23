@@ -170,7 +170,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let jenis = app.instansi.jenis;
     let t = jenis.templat();
 
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| {
             tema::judul(
                 ui,
@@ -178,7 +178,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 "Dipakai untuk kop, tanda tangan laporan, dan kwitansi.",
             )
         });
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             let simpan = ui
                 .add_enabled_ui(berubah && awalan_ok, |ui| {
                     tema::tombol_utama(ui, "", "Simpan")
@@ -524,7 +524,7 @@ fn lembar_ubah_jenis(app: &mut MyDigitApp, ctx: &egui::Context) {
     let mut pilih_lain = None;
     let r = egui::Modal::new(egui::Id::unique("ubah-jenis")).show(ctx, |ui| {
         let p = palet(ui);
-        ui.set_width(520.0);
+        ui.set_width(tema::lebar_modal(ui, 520.0));
         tema::subjudul(ui, "Masuk sebagai…");
         ui.add_space(4.0);
         ui.columns(4, |c| {
@@ -696,14 +696,18 @@ fn isian_label_nomor(
 
 fn catatan(ui: &mut egui::Ui, s: &str) {
     ui.horizontal(|ui| {
-        ui.add_space(158.0);
+        if !tema::sempit(ui) {
+            ui.add_space(158.0);
+        }
         ui.add(egui::Label::new(RichText::new(s).size(11.0).color(palet(ui).teks2)).wrap());
     });
 }
 
 fn catatan_oranye(ui: &mut egui::Ui, s: &str) {
     ui.horizontal(|ui| {
-        ui.add_space(158.0);
+        if !tema::sempit(ui) {
+            ui.add_space(158.0);
+        }
         let p = palet(ui);
         ui.label(ikon::rt(ikon::WARNING_CIRCLE).color(p.oranye));
         ui.add(egui::Label::new(RichText::new(s).size(11.0).color(p.oranye)).wrap());
@@ -719,10 +723,11 @@ fn bukan_latin1(s: &str) -> bool {
 
 /// Salin gambar pilihan ke folder data, lalu langsung simpan ke profil.
 fn pilih_logo(app: &mut MyDigitApp, d: &mut ProfilLembaga, ctx: &egui::Context) {
-    let Some(src) = rfd::FileDialog::new()
-        .add_filter("Gambar", &["png", "jpg", "jpeg"])
-        .pick_file()
-    else {
+    if !crate::berkas::BISA_MEMILIH {
+        app.galat("Memilih gambar belum tersedia di Android.");
+        return;
+    }
+    let Some(src) = crate::berkas::pilih_buka("Gambar", &["png", "jpg", "jpeg"]) else {
         return;
     };
     let ext = src

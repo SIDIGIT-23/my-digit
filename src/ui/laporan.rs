@@ -59,8 +59,9 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     if !jenis_tampil.contains(&app.ui_laporan.jenis) {
         app.ui_laporan.jenis = JenisLaporan::Bku;
     }
-    for baris in jenis_tampil.chunks(3) {
-        ui.columns(3, |c| {
+    let n_kolom = if tema::sempit(ui) { 2 } else { 3 };
+    for baris in jenis_tampil.chunks(n_kolom) {
+        ui.columns(n_kolom, |c| {
             for (ui, j) in c.iter_mut().zip(baris) {
                 let aktif = app.ui_laporan.jenis == *j;
                 let frame = egui::Frame::new()
@@ -75,14 +76,17 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.set_min_height(38.0);
-                        ui.spacing_mut().item_spacing.y = 2.0;
-                        ui.label(RichText::new(j.judul()).strong());
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(j.keterangan()).size(11.0).color(p.teks2),
-                            )
-                            .truncate(),
-                        );
+                        // Kolom egui rata kiri-kanan; teks dibuat rata kiri.
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+                            ui.add(egui::Label::new(RichText::new(j.judul()).strong()).truncate());
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(j.keterangan()).size(11.0).color(p.teks2),
+                                )
+                                .truncate(),
+                            );
+                        });
                     })
                     .response
                     .interact(egui::Sense::click())
@@ -173,13 +177,13 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
 
     ui.add_space(8.0);
     tema::kartu(ui, |ui| {
-        ui.horizontal(|ui| {
+        tema::baris_kepala(ui, |ui| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 tema::subjudul(ui, &tabel.judul);
                 tema::label_redup(ui, &tabel.subjudul);
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            tema::kanan(ui, |ui| {
                 if tema::tombol_utama(ui, ikon::FILE_PDF, "Ekspor PDF").clicked() {
                     let bytes =
                         pdf::laporan(&app.profil, app.gambar_pdf().as_ref(), &tabel, hari_ini());
@@ -217,10 +221,26 @@ fn nama_berkas(t: &Tabel, ekstensi: &str) -> String {
     format!("{} - {}.{ekstensi}", t.judul, sub)
 }
 
+/// Pratinjau tabel; di layar sempit tabel dibuat selebar 680 pt dan
+/// digeser ke samping.
 fn pratinjau(ui: &mut egui::Ui, t: &Tabel) {
+    if tema::sempit(ui) {
+        egui::ScrollArea::horizontal()
+            .id_salt("geser-pratinjau")
+            .show(ui, |ui| {
+                ui.set_min_width(680.0);
+                pratinjau_tabel(ui, t, 680.0);
+            });
+    } else {
+        let lebar = ui.available_width();
+        pratinjau_tabel(ui, t, lebar);
+    }
+}
+
+fn pratinjau_tabel(ui: &mut egui::Ui, t: &Tabel, lebar: f32) {
     let p = palet(ui);
     let satuan: f32 = t.kolom.iter().map(|k| k.lebar).sum();
-    let lebar = ui.available_width() - 8.0 * t.kolom.len() as f32;
+    let lebar = lebar - 8.0 * t.kolom.len() as f32;
     let mut tb = TableBuilder::new(ui)
         .id_salt(("pratinjau", t.judul.as_str()))
         .striped(true)

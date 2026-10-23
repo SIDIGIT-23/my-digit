@@ -2037,6 +2037,7 @@ dependencies = [
  "rfd",
  "rusqlite",
  "rust_xlsxwriter",
+ "winit",
  "winresource",
 ]
 

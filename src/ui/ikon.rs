@@ -56,6 +56,7 @@ pub const CARET_RIGHT: &str = "\u{E13A}";
 pub const CARET_UP_DOWN: &str = "\u{E140}";
 pub const CHART_PIE_SLICE: &str = "\u{E15A}";
 pub const CHECK_CIRCLE: &str = "\u{E184}";
+pub const DOTS_THREE_CIRCLE: &str = "\u{E200}";
 pub const ERASER: &str = "\u{E21E}";
 pub const FILE_PDF: &str = "\u{E702}";
 pub const FILE_TEXT: &str = "\u{E23A}";

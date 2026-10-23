@@ -18,9 +18,9 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         format!("{} · {}", app.profil.nama, tanggal_panjang(hari))
     };
 
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| tema::judul(ui, "Ringkasan", &sub));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             if tema::tombol(ui, ikon::ARROWS_LEFT_RIGHT, "Transfer").clicked() {
                 transaksi::buka_baru(app, JenisTransaksi::Transfer);
             }
@@ -167,7 +167,11 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     }
 }
 
-fn baris_transaksi(app: &MyDigitApp, ui: &mut egui::Ui, t: &Transaksi) -> egui::Response {
+pub(super) fn baris_transaksi(
+    app: &MyDigitApp,
+    ui: &mut egui::Ui,
+    t: &Transaksi,
+) -> egui::Response {
     let p = palet(ui);
     let (simbol, warna, tanda) = match t.jenis {
         JenisTransaksi::Masuk => (ikon::ARROW_DOWN_LEFT, p.hijau, "+"),

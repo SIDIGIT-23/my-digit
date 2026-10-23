@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, CornerRadius, Margin, RichText, Stroke, TextureHandle, Vec2};
 
+use crate::berkas;
 use crate::branding;
 use crate::db::{Db, FOLDER_CADANGAN_OTOMATIS, InfoCadangan, folder_data};
 use crate::format::{BULAN, hari_ini};
@@ -39,7 +40,17 @@ pub enum Halaman {
     Profil,
     Pengaturan,
     Tentang,
+    /// Ponsel: daftar menu yang tidak ada di bar tab.
+    Lainnya,
 }
+
+/// Bar tab ponsel: (halaman, ikon, label).
+const TAB_PONSEL: [ItemMenu; 4] = [
+    (Halaman::Ringkasan, ikon::HOUSE, "Ringkasan"),
+    (Halaman::Transaksi, ikon::RECEIPT, "Transaksi"),
+    (Halaman::Laporan, ikon::FILE_TEXT, "Laporan"),
+    (Halaman::Lainnya, ikon::DOTS_THREE_CIRCLE, "Lainnya"),
+];
 
 /// (halaman, ikon, label)
 type ItemMenu = (Halaman, &'static str, &'static str);
@@ -237,6 +248,7 @@ impl MyDigitApp {
             "profil" => Halaman::Profil,
             "pengaturan" => Halaman::Pengaturan,
             "tentang" => Halaman::Tentang,
+            "lainnya" => Halaman::Lainnya,
             "splash" => {
                 self.splash_sampai = Some(Instant::now() + Duration::from_secs(60));
                 Halaman::Ringkasan
@@ -418,17 +430,15 @@ impl MyDigitApp {
 
     /// Simpan berkas hasil ekspor lewat dialog "Simpan".
     pub fn simpan_berkas(&mut self, nama: &str, ekstensi: &str, isi: &[u8]) {
-        let Some(path) = rfd::FileDialog::new()
-            .set_file_name(nama)
-            .add_filter(ekstensi.to_uppercase(), &[ekstensi])
-            .save_file()
-        else {
+        let Some(path) = berkas::pilih_simpan(nama, &ekstensi.to_uppercase(), &[ekstensi]) else {
             return;
         };
         match std::fs::write(&path, isi) {
             Ok(()) => {
                 self.info(format!("Tersimpan: {}", path.display()));
-                buka_berkas(&path);
+                if berkas::BISA_MEMILIH {
+                    buka_berkas(&path);
+                }
             }
             Err(e) => self.galat(format!("Gagal menyimpan: {e}")),
         }
@@ -545,6 +555,186 @@ impl MyDigitApp {
                     });
                 });
             });
+    }
+
+    // ---------- Ponsel ----------
+
+    /// Tab yang menyala: halaman di luar bar tab termasuk "Lainnya".
+    fn tab_aktif(&self) -> Halaman {
+        match self.halaman {
+            Halaman::Ringkasan | Halaman::Transaksi | Halaman::Laporan => self.halaman,
+            _ => Halaman::Lainnya,
+        }
+    }
+
+    /// Bar atas ponsel: identitas, atau tombol kembali ke "Lainnya".
+    fn kepala_ponsel(&mut self, ui: &mut egui::Ui) {
+        let p = palet(ui);
+        let frame = egui::Frame::new().fill(p.latar).inner_margin(Margin {
+            left: 14,
+            right: 14,
+            top: 10,
+            bottom: 4,
+        });
+        let mut kembali = false;
+        egui::Panel::top("kepala-ponsel")
+            .frame(frame)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if self.tab_aktif() == Halaman::Lainnya && self.halaman != Halaman::Lainnya {
+                        let r = ui.add(
+                            egui::Button::new((
+                                ikon::rt(ikon::CARET_LEFT).color(p.aksen),
+                                RichText::new("Lainnya").color(p.aksen),
+                            ))
+                            .frame(false),
+                        );
+                        kembali = r.clicked();
+                    } else {
+                        ui.add(
+                            egui::Image::new(&self.logo_app).fit_to_exact_size(Vec2::splat(24.0)),
+                        );
+                        ui.label(RichText::new(branding::APP_NAME).strong());
+                        if !self.profil.nama.is_empty() {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(format!("· {}", self.profil.nama)).color(p.teks2),
+                                )
+                                .truncate(),
+                            );
+                        }
+                    }
+                });
+            });
+        if kembali {
+            self.halaman = Halaman::Lainnya;
+        }
+    }
+
+    /// Bar tab bawah ponsel.
+    fn tab_ponsel(&mut self, ui: &mut egui::Ui) {
+        let p = palet(ui);
+        let frame = egui::Frame::new()
+            .fill(p.sidebar)
+            .stroke(Stroke::new(0.5, p.garis))
+            .inner_margin(Margin {
+                left: 4,
+                right: 4,
+                top: 4,
+                bottom: 10,
+            });
+        let aktif = self.tab_aktif();
+        let mut pilih = None;
+        egui::Panel::bottom("tab-ponsel")
+            .frame(frame)
+            .resizable(false)
+            .show(ui, |ui| {
+                ui.columns(TAB_PONSEL.len(), |c| {
+                    for (ui, (h, simbol, label)) in c.iter_mut().zip(TAB_PONSEL) {
+                        let (rect, r) = ui.allocate_exact_size(
+                            Vec2::new(ui.available_width(), 46.0),
+                            egui::Sense::click(),
+                        );
+                        let warna = if h == aktif { p.aksen } else { p.teks2 };
+                        let atas = rect.center_top();
+                        ui.painter().text(
+                            atas + Vec2::new(0.0, 14.0),
+                            egui::Align2::CENTER_CENTER,
+                            simbol,
+                            ikon::font(22.0),
+                            warna,
+                        );
+                        ui.painter().text(
+                            atas + Vec2::new(0.0, 36.0),
+                            egui::Align2::CENTER_CENTER,
+                            label,
+                            egui::FontId::proportional(10.5),
+                            warna,
+                        );
+                        if r.clicked() {
+                            pilih = Some(h);
+                        }
+                    }
+                });
+            });
+        if let Some(h) = pilih {
+            self.halaman = h;
+        }
+    }
+
+    /// Halaman "Lainnya" (ponsel): menu bergaya daftar Pengaturan iOS.
+    fn lainnya(&mut self, ui: &mut egui::Ui) {
+        let p = palet(ui);
+        tema::judul(ui, "Lainnya", "");
+        let mut pilih = None;
+        for (bagian, item) in MENU {
+            let item: Vec<&ItemMenu> = item
+                .iter()
+                .filter(|(h, _, _)| !TAB_PONSEL.iter().any(|t| t.0 == *h))
+                .collect();
+            if item.is_empty() {
+                continue;
+            }
+            ui.label(
+                RichText::new(bagian.to_uppercase())
+                    .size(11.0)
+                    .color(p.teks2),
+            );
+            tema::kartu(ui, |ui| {
+                for (i, (h, simbol, label)) in item.iter().enumerate() {
+                    if i > 0 {
+                        pemisah(ui);
+                    }
+                    let (simbol, label) = if *h == Halaman::Profil {
+                        (self.instansi.jenis.ikon(), self.judul_profil())
+                    } else {
+                        (*simbol, label.to_string())
+                    };
+                    let (rect, r) = ui.allocate_exact_size(
+                        Vec2::new(ui.available_width(), 40.0),
+                        egui::Sense::click(),
+                    );
+                    let kiri = rect.left_center();
+                    ui.painter().text(
+                        kiri + Vec2::new(4.0, 0.0),
+                        egui::Align2::LEFT_CENTER,
+                        simbol,
+                        ikon::font(20.0),
+                        p.aksen,
+                    );
+                    ui.painter().text(
+                        kiri + Vec2::new(36.0, 0.0),
+                        egui::Align2::LEFT_CENTER,
+                        label,
+                        egui::FontId::proportional(15.0),
+                        p.teks,
+                    );
+                    ui.painter().text(
+                        rect.right_center(),
+                        egui::Align2::RIGHT_CENTER,
+                        ikon::CARET_RIGHT,
+                        ikon::font(15.0),
+                        p.teks2,
+                    );
+                    if r.clicked() {
+                        pilih = Some(*h);
+                    }
+                }
+            });
+            ui.add_space(12.0);
+        }
+        tema::label_redup(
+            ui,
+            format!(
+                "{} {} · {}",
+                branding::APP_NAME,
+                branding::APP_VERSION,
+                branding::CREDIT
+            ),
+        );
+        if let Some(h) = pilih {
+            self.halaman = h;
+        }
     }
 
     fn toast(&mut self, ctx: &egui::Context) {
@@ -722,10 +912,11 @@ impl MyDigitApp {
 
     /// Pilih berkas cadangan lalu tampilkan lembar konfirmasi.
     pub fn mulai_pulihkan(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Cadangan My Digit", &["sqlite", "db"])
-            .pick_file()
-        else {
+        if !berkas::BISA_MEMILIH {
+            self.galat("Memilih berkas cadangan belum tersedia di Android.");
+            return;
+        }
+        let Some(path) = berkas::pilih_buka("Cadangan My Digit", &["sqlite", "db"]) else {
             return;
         };
         let info = Db::periksa_cadangan(&path);
@@ -740,7 +931,7 @@ impl MyDigitApp {
         let mut lanjut = false;
         let r = egui::Modal::new(egui::Id::unique("konfirmasi-pulihkan")).show(ctx, |ui| {
             let p = palet(ui);
-            ui.set_width(460.0);
+            ui.set_width(tema::lebar_modal(ui, 460.0));
             tema::subjudul(ui, "Pulihkan data?");
             ui.add(
                 egui::Label::new(
@@ -884,11 +1075,7 @@ impl MyDigitApp {
 
     fn cadangkan(&mut self) {
         let nama = format!("{}-cadangan-{}.sqlite", slug(&self.profil.nama), hari_ini());
-        let Some(path) = rfd::FileDialog::new()
-            .set_file_name(&nama)
-            .add_filter("SQLite", &["sqlite"])
-            .save_file()
-        else {
+        let Some(path) = berkas::pilih_simpan(&nama, "SQLite", &["sqlite"]) else {
             return;
         };
         match self.db().cadangkan(&path) {
@@ -935,14 +1122,30 @@ impl eframe::App for MyDigitApp {
             self.toast(&ctx);
             return;
         }
-        self.sidebar(ui);
         let p = palet(ui);
-        let frame = egui::Frame::new().fill(p.latar).inner_margin(Margin {
-            left: 28,
-            right: 28,
-            top: 24,
-            bottom: 16,
-        });
+        let ponsel = tema::sempit(ui);
+        let margin = if ponsel {
+            self.kepala_ponsel(ui);
+            self.tab_ponsel(ui);
+            Margin {
+                left: 14,
+                right: 14,
+                top: 4,
+                bottom: 8,
+            }
+        } else {
+            if self.halaman == Halaman::Lainnya {
+                self.halaman = Halaman::Ringkasan;
+            }
+            self.sidebar(ui);
+            Margin {
+                left: 28,
+                right: 28,
+                top: 24,
+                bottom: 16,
+            }
+        };
+        let frame = egui::Frame::new().fill(p.latar).inner_margin(margin);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -957,6 +1160,7 @@ impl eframe::App for MyDigitApp {
                     Halaman::Profil => profil::tampil(self, ui),
                     Halaman::Pengaturan => self.pengaturan(ui),
                     Halaman::Tentang => self.tentang(ui),
+                    Halaman::Lainnya => self.lainnya(ui),
                 });
         });
         transaksi::formulir(self, &ctx);
@@ -1064,10 +1268,5 @@ pub fn muat_tekstur(ctx: &egui::Context, nama: &str, bytes: &[u8]) -> Option<Tex
 
 /// Buka berkas atau folder dengan aplikasi bawaan sistem.
 pub fn buka_berkas(path: &std::path::Path) {
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(path).spawn();
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    berkas::buka(path);
 }

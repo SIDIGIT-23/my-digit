@@ -40,7 +40,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     };
     let ctx = ui.ctx().clone();
     let p = palet(ui);
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| {
             tema::judul(
                 ui,
@@ -48,7 +48,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 "Tempat uang lembaga disimpan: brankas tunai dan rekening bank.",
             )
         });
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, ikon::PLUS, "Akun Baru").clicked() {
                 app.ui_akun.akun = Some(FormAkun {
                     id: 0,
@@ -123,7 +123,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         let mut tutup = false;
         let mut simpan = false;
         let r = egui::Modal::new(egui::Id::unique("form-akun")).show(&ctx, |ui| {
-            ui.set_width(440.0);
+            ui.set_width(tema::lebar_modal(ui, 440.0));
             tema::subjudul(ui, if f.id == 0 { "Akun Baru" } else { "Ubah Akun" });
             ui.add_space(6.0);
             tema::baris_form(ui, "Jenis", |ui| {
@@ -192,7 +192,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
 
 pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| {
             let sub = format!(
                 "Pengelompokan penerimaan dan pengeluaran, sesuaikan dengan kode rekening {}.",
@@ -200,7 +200,7 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             );
             tema::judul(ui, "Kategori", &sub)
         });
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, ikon::PLUS, "Kategori Baru").clicked() {
                 app.ui_akun.kategori = Some(FormKategori {
                     id: 0,
@@ -265,7 +265,7 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         let mut tutup = false;
         let mut simpan = false;
         let r = egui::Modal::new(egui::Id::unique("form-kategori")).show(&ctx, |ui| {
-            ui.set_width(420.0);
+            ui.set_width(tema::lebar_modal(ui, 420.0));
             tema::subjudul(
                 ui,
                 if f.id == 0 {
@@ -336,7 +336,7 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
 fn konfirmasi(ctx: &egui::Context, id: &str, pertanyaan: &str) -> Option<bool> {
     let mut hasil = None;
     let r = egui::Modal::new(egui::Id::unique(id)).show(ctx, |ui| {
-        ui.set_width(340.0);
+        ui.set_width(tema::lebar_modal(ui, 340.0));
         tema::subjudul(ui, pertanyaan);
         tema::label_redup(ui, "Tindakan ini tidak dapat dibatalkan.");
         ui.add_space(8.0);

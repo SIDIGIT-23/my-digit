@@ -32,9 +32,9 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         "Susun anggaran tahunan ({}), lalu pantau realisasinya.",
         app.instansi.istilah_anggaran
     );
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| tema::judul(ui, "Anggaran", &sub));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, "", "Simpan Anggaran").clicked() {
                 simpan(app, &ctx);
             }
@@ -79,49 +79,54 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 },
             );
             ui.add_space(4.0);
-            egui::Grid::new(("anggaran", arus.kode()))
-                .num_columns(5)
-                .spacing([14.0, 8.0])
-                .striped(true)
+            egui::ScrollArea::horizontal()
+                .id_salt(("geser-anggaran", arus.kode()))
                 .show(ui, |ui| {
-                    for h in ["Kategori", "Anggaran (Rp)", "Realisasi", "Sisa", "Capaian"] {
-                        ui.label(RichText::new(h).strong().color(p.teks2));
-                    }
-                    ui.end_row();
-                    for k in kategori.iter().filter(|k| k.arus == arus) {
-                        let teks = isian.entry(k.id).or_default();
-                        let a = parse_rupiah(teks).unwrap_or(0);
-                        let r = realisasi.get(&k.id).copied().unwrap_or(0);
-                        ta += a;
-                        tr += r;
-                        ui.label(format!("{}  {}", k.kode, k.nama));
-                        tema::isian_rupiah(ui, teks, 150.0);
-                        ui.label(rupiah(r));
-                        let sisa = a - r;
-                        match (arus, sisa < 0) {
-                            // Penerimaan melebihi target adalah surplus, bukan kekurangan.
-                            (Arus::Masuk, true) => ui
-                                .label(RichText::new(format!("+{}", rupiah(-sisa))).color(p.hijau)),
-                            (Arus::Keluar, true) => {
-                                ui.label(RichText::new(rupiah(sisa)).color(p.merah))
+                    egui::Grid::new(("anggaran", arus.kode()))
+                        .num_columns(5)
+                        .spacing([14.0, 8.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for h in ["Kategori", "Anggaran (Rp)", "Realisasi", "Sisa", "Capaian"] {
+                                ui.label(RichText::new(h).strong().color(p.teks2));
                             }
-                            _ => ui.label(rupiah(sisa)),
-                        };
-                        let rasio = if a > 0 { r as f32 / a as f32 } else { 0.0 };
-                        let warna = match (arus, rasio) {
-                            (Arus::Keluar, x) if x > 1.0 => p.merah,
-                            (Arus::Keluar, x) if x > 0.9 => p.oranye,
-                            _ => p.aksen,
-                        };
-                        tema::bilah(ui, rasio, warna, &persen(r, a));
-                        ui.end_row();
-                    }
-                    ui.label(RichText::new("Jumlah").strong());
-                    ui.label(RichText::new(rupiah(ta)).strong());
-                    ui.label(RichText::new(rupiah(tr)).strong());
-                    ui.label(RichText::new(rupiah(ta - tr)).strong());
-                    ui.label(RichText::new(persen(tr, ta)).strong());
-                    ui.end_row();
+                            ui.end_row();
+                            for k in kategori.iter().filter(|k| k.arus == arus) {
+                                let teks = isian.entry(k.id).or_default();
+                                let a = parse_rupiah(teks).unwrap_or(0);
+                                let r = realisasi.get(&k.id).copied().unwrap_or(0);
+                                ta += a;
+                                tr += r;
+                                ui.label(format!("{}  {}", k.kode, k.nama));
+                                tema::isian_rupiah(ui, teks, 150.0);
+                                ui.label(rupiah(r));
+                                let sisa = a - r;
+                                match (arus, sisa < 0) {
+                                    // Penerimaan melebihi target adalah surplus, bukan kekurangan.
+                                    (Arus::Masuk, true) => ui.label(
+                                        RichText::new(format!("+{}", rupiah(-sisa))).color(p.hijau),
+                                    ),
+                                    (Arus::Keluar, true) => {
+                                        ui.label(RichText::new(rupiah(sisa)).color(p.merah))
+                                    }
+                                    _ => ui.label(rupiah(sisa)),
+                                };
+                                let rasio = if a > 0 { r as f32 / a as f32 } else { 0.0 };
+                                let warna = match (arus, rasio) {
+                                    (Arus::Keluar, x) if x > 1.0 => p.merah,
+                                    (Arus::Keluar, x) if x > 0.9 => p.oranye,
+                                    _ => p.aksen,
+                                };
+                                tema::bilah(ui, rasio, warna, &persen(r, a));
+                                ui.end_row();
+                            }
+                            ui.label(RichText::new("Jumlah").strong());
+                            ui.label(RichText::new(rupiah(ta)).strong());
+                            ui.label(RichText::new(rupiah(tr)).strong());
+                            ui.label(RichText::new(rupiah(ta - tr)).strong());
+                            ui.label(RichText::new(persen(tr, ta)).strong());
+                            ui.end_row();
+                        });
                 });
         });
         ui.add_space(12.0);

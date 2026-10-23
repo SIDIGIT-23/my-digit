@@ -129,7 +129,7 @@ pub fn cetak_kwitansi(app: &mut MyDigitApp, t: &Transaksi) {
 
 pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let p = palet(ui);
-    ui.horizontal(|ui| {
+    tema::baris_kepala(ui, |ui| {
         ui.vertical(|ui| {
             tema::judul(
                 ui,
@@ -137,7 +137,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 "Catat setiap penerimaan dan pengeluaran segera setelah terjadi.",
             )
         });
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, ikon::PLUS, "Transaksi Baru").clicked() {
                 buka_baru(app, JenisTransaksi::Masuk);
             }
@@ -193,7 +193,8 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         .ui_transaksi
         .terpilih
         .and_then(|id| daftar.iter().find(|t| t.id == id).cloned());
-    ui.horizontal(|ui| {
+    let ponsel = tema::sempit(ui);
+    ui.horizontal_wrapped(|ui| {
         let (m, k) = daftar.iter().fold((0, 0), |(m, k), t| match t.jenis {
             JenisTransaksi::Masuk => (m + t.jumlah, k),
             JenisTransaksi::Keluar => (m, k + t.jumlah),
@@ -202,6 +203,10 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         tema::label_redup(ui, format!("{} transaksi", daftar.len()));
         ui.label(RichText::new(format!("Masuk {}", rupiah(m))).color(p.hijau));
         ui.label(RichText::new(format!("Keluar {}", rupiah(k))).color(p.merah));
+        // Di ponsel, ketuk baris untuk mengubah; kwitansi & hapus ada di formulir.
+        if ponsel {
+            return;
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(terpilih.is_some(), |ui| {
                 if tema::tombol_bahaya(ui, ikon::TRASH, "Hapus").clicked() {
@@ -239,6 +244,15 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 tema::label_redup(ui, "Tidak ada transaksi pada periode ini.");
             });
             ui.add_space(30.0);
+            return;
+        }
+        if ponsel {
+            for t in &daftar {
+                if super::ringkasan::baris_transaksi(app, ui, t).clicked() {
+                    app.ui_transaksi.terpilih = Some(t.id);
+                    buka_edit(app, t);
+                }
+            }
             return;
         }
         let tinggi = (ui.ctx().content_rect().height() - 330.0).max(240.0);
@@ -350,7 +364,7 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
         let mut selesai = false;
         let t = app.transaksi.iter().find(|t| t.id == id).cloned();
         egui::Modal::new(egui::Id::unique("hapus-transaksi")).show(ctx, |ui| {
-            ui.set_width(360.0);
+            ui.set_width(tema::lebar_modal(ui, 360.0));
             tema::subjudul(ui, "Hapus transaksi?");
             if let Some(t) = &t {
                 ui.label(format!(
@@ -383,15 +397,17 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
     };
     let mut tutup = false;
     let mut simpan = false;
+    let mut minta_hapus = false;
+    let mut minta_kwitansi = false;
     let instansi = app.instansi.clone();
     let pajak_tampil = app.pajak_tampil();
     let p = egui::Modal::new(egui::Id::unique("form-transaksi"))
         .show(ctx, |ui| {
             let p = palet(ui);
-            ui.set_width(520.0);
-            ui.horizontal(|ui| {
+            ui.set_width(tema::lebar_modal(ui, 520.0));
+            tema::baris_kepala(ui, |ui| {
                 tema::subjudul(ui, if f.id == 0 { "Transaksi Baru" } else { "Ubah Transaksi" });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                tema::kanan(ui, |ui| {
                     let mut j = f.jenis;
                     tema::segmen(
                         ui,
@@ -442,7 +458,7 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
                         .kategori(f.kategori_id)
                         .map(|k| format!("{} {}", k.kode, k.nama))
                         .unwrap_or_else(|| "Pilih kategori…".into());
-                    egui::ComboBox::from_id_salt("kategori").icon(tema::ikon_dropdown).selected_text(teks).width(340.0).show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt("kategori").icon(tema::ikon_dropdown).selected_text(teks).width(ui.available_width().min(340.0)).show_ui(ui, |ui| {
                         for k in app.kategori.iter().filter(|k| k.arus == arus) {
                             ui.selectable_value(&mut f.kategori_id, Some(k.id), format!("{}  {}", k.kode, k.nama));
                         }
@@ -454,9 +470,9 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
                 let label = if f.jenis == JenisTransaksi::Masuk { "Diterima dari" } else { "Dibayarkan kepada" };
                 tema::baris_form(ui, label, |ui| tema::isian(ui, &mut f.pihak, "Nama orang / toko / instansi"));
                 tema::baris_form(ui, "Sumber dana", |ui| {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         let petunjuk = instansi.sumber_dana.first().map(|s| format!("mis. {s}")).unwrap_or_default();
-                        ui.add(egui::TextEdit::singleline(&mut f.sumber_dana).hint_text(petunjuk).desired_width(200.0));
+                        ui.add(egui::TextEdit::singleline(&mut f.sumber_dana).hint_text(petunjuk).desired_width(ui.available_width().min(200.0)));
                         for s in &instansi.sumber_dana {
                             if ui.small_button(s).clicked() {
                                 f.sumber_dana = s.clone();
@@ -507,6 +523,16 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
+                if f.id != 0 {
+                    if tema::tombol_ikon(ui, ikon::TRASH, "Hapus transaksi", p.merah).clicked() {
+                        minta_hapus = true;
+                    }
+                    if f.jenis != JenisTransaksi::Transfer
+                        && tema::tombol_ikon(ui, ikon::PRINTER, "Cetak kwitansi", p.aksen).clicked()
+                    {
+                        minta_kwitansi = true;
+                    }
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if tema::tombol_utama(ui, "", "Simpan").clicked() {
                         simpan = true;
@@ -521,6 +547,13 @@ pub fn formulir(app: &mut MyDigitApp, ctx: &egui::Context) {
             }
             p
         });
+    if minta_hapus {
+        app.ui_transaksi.hapus = Some(f.id);
+        tutup = true;
+    }
+    if minta_kwitansi && let Some(t) = app.transaksi.iter().find(|t| t.id == f.id).cloned() {
+        cetak_kwitansi(app, &t);
+    }
     if p.should_close() {
         tutup = true;
     }
@@ -556,7 +589,7 @@ fn pilih_akun(ui: &mut egui::Ui, id: &str, akun: &[Akun], terpilih: &mut i64) {
     egui::ComboBox::from_id_salt(id)
         .icon(tema::ikon_dropdown)
         .selected_text(teks)
-        .width(340.0)
+        .width(ui.available_width().min(340.0))
         .show_ui(ui, |ui| {
             for a in akun {
                 ui.selectable_value(
