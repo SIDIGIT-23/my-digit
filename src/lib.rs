@@ -30,7 +30,13 @@ pub fn jalankan() -> eframe::Result {
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
     {
-        viewport = viewport.with_inner_size([lebar, 844.0]);
+        viewport = viewport.with_inner_size([
+            lebar,
+            std::env::var("MY_DIGIT_TINGGI")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(844.0),
+        ]);
     }
     // macOS: judul jendela transparan agar sidebar menyatu dengan tombol jendela,
     // seperti aplikasi bawaan Apple.

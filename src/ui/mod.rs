@@ -577,6 +577,97 @@ impl MyDigitApp {
             });
     }
 
+    // ---------- Tablet (kelas sedang) ----------
+
+    /// Rel ikon di kiri: semua menu sebagai ikon + label pendek.
+    fn rel(&mut self, ui: &mut egui::Ui) {
+        let p = palet(ui);
+        let frame = egui::Frame::new().fill(p.sidebar).inner_margin(Margin {
+            left: 6,
+            right: 6,
+            top: if cfg!(target_os = "macos") { 38 } else { 12 },
+            bottom: 8,
+        });
+        let mut pilih = None;
+        egui::Panel::left("rel")
+            .exact_size(84.0)
+            .resizable(false)
+            .frame(frame)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add(
+                                egui::Image::new(&self.logo_app)
+                                    .fit_to_exact_size(Vec2::splat(30.0)),
+                            );
+                        });
+                        for (_, item) in MENU {
+                            ui.add_space(6.0);
+                            for (h, simbol, label) in *item {
+                                let (simbol, label, penuh) = if *h == Halaman::Profil {
+                                    (self.instansi.jenis.ikon(), "Profil", self.judul_profil())
+                                } else {
+                                    (
+                                        *simbol,
+                                        label_pendek(*h).unwrap_or(label),
+                                        label.to_string(),
+                                    )
+                                };
+                                let (rect, r) = ui.allocate_exact_size(
+                                    Vec2::new(ui.available_width(), 50.0),
+                                    egui::Sense::click(),
+                                );
+                                let aktif = self.halaman == *h;
+                                if aktif {
+                                    ui.painter().rect_filled(
+                                        rect.shrink2(Vec2::new(4.0, 2.0)),
+                                        CornerRadius::same(10),
+                                        p.pilih,
+                                    );
+                                } else if r.hovered() {
+                                    ui.painter().rect_filled(
+                                        rect.shrink2(Vec2::new(4.0, 2.0)),
+                                        CornerRadius::same(10),
+                                        p.garis.gamma_multiply(0.6),
+                                    );
+                                }
+                                let warna = if aktif {
+                                    p.aksen
+                                } else {
+                                    p.aksen.gamma_multiply(0.85)
+                                };
+                                let atas = rect.center_top();
+                                ui.painter().text(
+                                    atas + Vec2::new(0.0, 18.0),
+                                    egui::Align2::CENTER_CENTER,
+                                    simbol,
+                                    ikon::font(20.0),
+                                    warna,
+                                );
+                                ui.painter().text(
+                                    atas + Vec2::new(0.0, 39.0),
+                                    egui::Align2::CENTER_CENTER,
+                                    label,
+                                    egui::FontId::proportional(10.5),
+                                    p.teks,
+                                );
+                                if r.on_hover_text(penuh)
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .clicked()
+                                {
+                                    pilih = Some(*h);
+                                }
+                            }
+                        }
+                    });
+            });
+        if let Some(h) = pilih {
+            self.halaman = h;
+        }
+    }
+
     // ---------- Ponsel ----------
 
     /// Tab yang menyala: halaman di luar bar tab termasuk "Lainnya".
@@ -1143,8 +1234,12 @@ impl eframe::App for MyDigitApp {
             return;
         }
         let p = palet(ui);
-        let ponsel = tema::sempit(ui);
-        let margin = if ponsel {
+        let kelas = tema::kelas(&ctx);
+        if kelas != tema::Kelas::Ringkas && self.halaman == Halaman::Lainnya {
+            // "Lainnya" hanya ada di bar tab ponsel.
+            self.halaman = Halaman::Ringkasan;
+        }
+        let margin = if kelas == tema::Kelas::Ringkas {
             self.kepala_ponsel(ui);
             self.tab_ponsel(ui);
             Margin {
@@ -1153,10 +1248,15 @@ impl eframe::App for MyDigitApp {
                 top: 4,
                 bottom: 8,
             }
-        } else {
-            if self.halaman == Halaman::Lainnya {
-                self.halaman = Halaman::Ringkasan;
+        } else if kelas == tema::Kelas::Sedang {
+            self.rel(ui);
+            Margin {
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 12,
             }
+        } else {
             self.sidebar(ui);
             Margin {
                 left: 28,
@@ -1190,6 +1290,17 @@ impl eframe::App for MyDigitApp {
 }
 
 // ---------- Komponen bersama ----------
+
+/// Label singkat untuk rel ikon yang sempit.
+fn label_pendek(h: Halaman) -> Option<&'static str> {
+    match h {
+        Halaman::PemeriksaanKas => Some("Kas"),
+        Halaman::Akun => Some("Akun"),
+        Halaman::Pengaturan => Some("Tampilan"),
+        Halaman::Tentang => Some("Tentang"),
+        _ => None,
+    }
+}
 
 fn item_sidebar(ui: &mut egui::Ui, simbol: &str, label: &str, aktif: bool) -> egui::Response {
     let p = palet(ui);

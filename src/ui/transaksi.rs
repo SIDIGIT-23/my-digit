@@ -193,7 +193,8 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         .ui_transaksi
         .terpilih
         .and_then(|id| daftar.iter().find(|t| t.id == id).cloned());
-    let ponsel = tema::sempit(ui);
+    // Tabel butuh ~780 pt; bila kurang (HP, tablet tegak), tampil sebagai daftar.
+    let ponsel = tema::ruang_kurang(ui, 780.0);
     ui.horizontal_wrapped(|ui| {
         let (m, k) = daftar.iter().fold((0, 0), |(m, k), t| match t.jenis {
             JenisTransaksi::Masuk => (m + t.jumlah, k),

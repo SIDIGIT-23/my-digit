@@ -527,7 +527,7 @@ fn lembar_ubah_jenis(app: &mut MyDigitApp, ctx: &egui::Context) {
         ui.set_width(tema::lebar_modal(ui, 520.0));
         tema::subjudul(ui, "Masuk sebagai…");
         ui.add_space(4.0);
-        let kolom = if tema::sempit(ui) { 2 } else { 4 };
+        let kolom = if tema::ruang_kurang(ui, 470.0) { 2 } else { 4 };
         for baris in JenisInstansi::SEMUA.chunks(kolom) {
             ui.columns(kolom, |c| {
                 for (ui, j) in c.iter_mut().zip(baris.iter().copied()) {
@@ -699,7 +699,7 @@ fn isian_label_nomor(
 
 fn catatan(ui: &mut egui::Ui, s: &str) {
     ui.horizontal(|ui| {
-        if !tema::sempit(ui) {
+        if !tema::form_bertumpuk(ui) {
             ui.add_space(158.0);
         }
         ui.add(egui::Label::new(RichText::new(s).size(11.0).color(palet(ui).teks2)).wrap());
@@ -708,7 +708,7 @@ fn catatan(ui: &mut egui::Ui, s: &str) {
 
 fn catatan_oranye(ui: &mut egui::Ui, s: &str) {
     ui.horizontal(|ui| {
-        if !tema::sempit(ui) {
+        if !tema::form_bertumpuk(ui) {
             ui.add_space(158.0);
         }
         let p = palet(ui);

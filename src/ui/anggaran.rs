@@ -79,7 +79,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 },
             );
             ui.add_space(4.0);
-            if tema::sempit(ui) {
+            if tema::ruang_kurang(ui, 640.0) {
                 // Ponsel: satu kategori per baris, tanpa tabel lebar.
                 for (n, k) in kategori.iter().filter(|k| k.arus == arus).enumerate() {
                     if n > 0 {

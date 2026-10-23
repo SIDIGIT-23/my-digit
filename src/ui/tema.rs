@@ -160,15 +160,42 @@ pub fn pasang(ctx: &egui::Context) {
 
 // ---------- Komponen ----------
 
-/// Layar sempit (ponsel): tata letak tab bawah dan isian bertumpuk.
+/// Kelas ukuran jendela (mengikuti *window size classes* Material Design):
+/// menentukan bentuk navigasi.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kelas {
+    /// < 600 pt — HP: bar tab bawah.
+    Ringkas,
+    /// 600–840 pt — tablet tegak, HP lipat: rel ikon di kiri.
+    Sedang,
+    /// ≥ 840 pt — tablet mendatar, laptop: sidebar penuh.
+    Lebar,
+}
+
+pub fn kelas(ctx: &egui::Context) -> Kelas {
+    match ctx.content_rect().width() {
+        w if w < 600.0 => Kelas::Ringkas,
+        w if w < 840.0 => Kelas::Sedang,
+        _ => Kelas::Lebar,
+    }
+}
+
+/// Layar HP (kelas ringkas): judul dan angka sedikit lebih kecil.
 pub fn sempit(ui: &Ui) -> bool {
-    ui.ctx().content_rect().width() < 700.0
+    kelas(ui.ctx()) == Kelas::Ringkas
+}
+
+/// Ruang isi di tempat ini kurang dari `butuh` pt: komponen beralih ke
+/// bentuk ringkas (tabel → daftar, label di atas isian, dst.). Dipakai
+/// alih-alih lebar jendela, karena sidebar/rel ikut memakan ruang.
+pub fn ruang_kurang(ui: &Ui, butuh: f32) -> bool {
+    ui.available_width() < butuh
 }
 
 /// Baris kepala halaman (judul + tombol kanan). Di layar sempit tombol
 /// pindah ke bawah judul agar tidak menumpuk.
 pub fn baris_kepala<R>(ui: &mut Ui, isi: impl FnOnce(&mut Ui) -> R) -> R {
-    if sempit(ui) {
+    if ruang_kurang(ui, 560.0) {
         ui.vertical(isi).inner
     } else {
         ui.horizontal(isi).inner
@@ -388,7 +415,11 @@ pub fn ubin(ui: &mut Ui, ikon: &str, label: &str, nilai: &str, warna: Color32) {
                 ui.label(ikon::rt(ikon).size(15.0).color(warna));
                 ui.add(egui::Label::new(RichText::new(label).color(p.teks2)).truncate());
             });
-            let ukuran = if sempit(ui) { 16.0 } else { 21.0 };
+            let ukuran = if ui.available_width() < 230.0 {
+                16.0
+            } else {
+                21.0
+            };
             ui.add(egui::Label::new(RichText::new(nilai).size(ukuran).strong()).truncate());
         });
     });
@@ -411,10 +442,14 @@ pub fn bilah(ui: &mut Ui, rasio: f32, warna: Color32, label: &str) {
 }
 
 /// Baris isian formulir: label di kiri, kontrol di kanan.
-/// Di layar sempit label ditaruh di atas isian.
+/// Label di atas isian bila ruangnya sempit.
+pub fn form_bertumpuk(ui: &Ui) -> bool {
+    ruang_kurang(ui, 440.0)
+}
+
 pub fn baris_form<R>(ui: &mut Ui, label: &str, isi: impl FnOnce(&mut Ui) -> R) -> R {
     let p = palet(ui);
-    if sempit(ui) {
+    if form_bertumpuk(ui) {
         return ui
             .vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;

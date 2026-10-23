@@ -59,7 +59,11 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     if !jenis_tampil.contains(&app.ui_laporan.jenis) {
         app.ui_laporan.jenis = JenisLaporan::Bku;
     }
-    let n_kolom = if tema::sempit(ui) { 2 } else { 3 };
+    let n_kolom = match ui.available_width() {
+        w if w >= 700.0 => 3,
+        w if w >= 300.0 => 2,
+        _ => 1,
+    };
     for baris in jenis_tampil.chunks(n_kolom) {
         ui.columns(n_kolom, |c| {
             for (ui, j) in c.iter_mut().zip(baris) {
@@ -224,7 +228,7 @@ fn nama_berkas(t: &Tabel, ekstensi: &str) -> String {
 /// Pratinjau tabel; di layar sempit tabel dibuat selebar 680 pt dan
 /// digeser ke samping.
 fn pratinjau(ui: &mut egui::Ui, t: &Tabel) {
-    if tema::sempit(ui) {
+    if tema::ruang_kurang(ui, 680.0) {
         egui::ScrollArea::horizontal()
             .id_salt("geser-pratinjau")
             .show(ui, |ui| {

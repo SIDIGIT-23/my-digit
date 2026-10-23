@@ -94,7 +94,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             }
             // Nama & info mengisi sisa lebar (dipotong "…"), sehingga baris tidak
             // menumpuk di layar sempit; di ponsel tombol menjadi ikon saja.
-            let ponsel = tema::sempit(ui);
+            let ponsel = tema::ruang_kurang(ui, 540.0);
             let (mut ubah, mut hapus) = (false, false);
             ui.horizontal(|ui| {
                 let simbol = if a.jenis == JenisAkun::Bank {
