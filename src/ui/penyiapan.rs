@@ -102,7 +102,7 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.set_max_width(640.0);
+                    ui.set_max_width(ui.available_width().min(640.0));
                     match st.langkah {
                         Langkah::Jenis => langkah_jenis(app, ui, &mut st, &mut pulihkan),
                         Langkah::Data => selesai = langkah_data(ui, &mut st),
@@ -311,18 +311,21 @@ fn langkah_data(ui: &mut egui::Ui, st: &mut State) -> bool {
             ui.label(RichText::new(g).color(p.merah));
         }
         ui.add_space(10.0);
+        let bisa = !st.profil.nama.trim().is_empty();
+        // Petunjuk di atas baris tombol, agar tidak menimpa "Kembali" di layar sempit.
+        if !bisa {
+            ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
+                tema::label_redup(ui, format!("Isi nama {} dulu.", jenis.kata()));
+            });
+        }
         ui.horizontal(|ui| {
             if tema::tombol(ui, ikon::CARET_LEFT, "Kembali").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 st.langkah = Langkah::Jenis;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let bisa = !st.profil.nama.trim().is_empty();
                 let r = ui.add_enabled_ui(bisa, |ui| tema::tombol_utama(ui, "", "Mulai Gunakan My Digit")).inner;
                 if r.clicked() {
                     mulai = true;
-                }
-                if !bisa {
-                    tema::label_redup(ui, format!("Isi nama {} dulu.", jenis.kata()));
                 }
             });
         });

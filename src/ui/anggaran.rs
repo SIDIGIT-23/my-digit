@@ -79,6 +79,55 @@ pub fn tampil(app: &mut MyDigitApp, ui: &mut egui::Ui) {
                 },
             );
             ui.add_space(4.0);
+            if tema::sempit(ui) {
+                // Ponsel: satu kategori per baris, tanpa tabel lebar.
+                for (n, k) in kategori.iter().filter(|k| k.arus == arus).enumerate() {
+                    if n > 0 {
+                        super::pemisah(ui);
+                    }
+                    let teks = isian.entry(k.id).or_default();
+                    let r = realisasi.get(&k.id).copied().unwrap_or(0);
+                    ui.add(
+                        egui::Label::new(RichText::new(format!("{}  {}", k.kode, k.nama)).strong())
+                            .truncate(),
+                    );
+                    ui.horizontal(|ui| {
+                        tema::isian_rupiah(ui, teks, 140.0);
+                        let a = parse_rupiah(teks).unwrap_or(0);
+                        let rasio = if a > 0 { r as f32 / a as f32 } else { 0.0 };
+                        let warna = match (arus, rasio) {
+                            (Arus::Keluar, x) if x > 1.0 => p.merah,
+                            (Arus::Keluar, x) if x > 0.9 => p.oranye,
+                            _ => p.aksen,
+                        };
+                        tema::bilah(ui, rasio, warna, &persen(r, a));
+                    });
+                    let a = parse_rupiah(teks).unwrap_or(0);
+                    ta += a;
+                    tr += r;
+                    let sisa = a - r;
+                    let sisa = match (arus, sisa < 0) {
+                        (Arus::Masuk, true) => format!("surplus {}", rupiah(-sisa)),
+                        _ => format!("sisa {}", rupiah(sisa)),
+                    };
+                    ui.label(
+                        RichText::new(format!("Realisasi {} · {sisa}", rupiah(r)))
+                            .size(12.0)
+                            .color(p.teks2),
+                    );
+                }
+                super::pemisah(ui);
+                ui.label(
+                    RichText::new(format!(
+                        "Jumlah {} · realisasi {} ({})",
+                        rupiah(ta),
+                        rupiah(tr),
+                        persen(tr, ta)
+                    ))
+                    .strong(),
+                );
+                return;
+            }
             egui::ScrollArea::horizontal()
                 .id_salt(("geser-anggaran", arus.kode()))
                 .show(ui, |ui| {

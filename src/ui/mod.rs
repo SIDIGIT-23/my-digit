@@ -262,6 +262,26 @@ impl MyDigitApp {
                 self.ui_penyiapan = Some(st);
                 Halaman::Ringkasan
             }
+            "akun-baru" => {
+                akun::buka_akun_baru(self);
+                Halaman::Akun
+            }
+            "kategori-baru" => {
+                akun::buka_kategori_baru(self);
+                Halaman::Kategori
+            }
+            "hapus-akun" => {
+                akun::buka_hapus_akun_dev(self);
+                Halaman::Akun
+            }
+            "form-masuk" => {
+                transaksi::buka_baru(self, JenisTransaksi::Masuk);
+                Halaman::Transaksi
+            }
+            "form-transfer" => {
+                transaksi::buka_baru(self, JenisTransaksi::Transfer);
+                Halaman::Transaksi
+            }
             "ubah-jenis" => {
                 profil::State::buka_ubah_jenis(self, crate::instansi::JenisInstansi::Organisasi);
                 Halaman::Profil
@@ -791,7 +811,7 @@ impl MyDigitApp {
                         .size(18.0)
                         .strong(),
                 );
-                ui.set_max_width(560.0);
+                ui.set_max_width(ui.available_width().min(560.0));
                 ui.label(&galat);
                 ui.label(format!("Lokasi: {}", folder_data().display()));
                 ui.add_space(12.0);
@@ -828,7 +848,7 @@ impl MyDigitApp {
             ui.add_space(24.0);
         });
         ui.vertical_centered(|ui| {
-            ui.set_max_width(520.0);
+            ui.set_max_width(ui.available_width().min(520.0));
             tema::kartu(ui, |ui| {
                 ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                     tema::subjudul(ui, "Fitur");

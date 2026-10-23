@@ -527,32 +527,35 @@ fn lembar_ubah_jenis(app: &mut MyDigitApp, ctx: &egui::Context) {
         ui.set_width(tema::lebar_modal(ui, 520.0));
         tema::subjudul(ui, "Masuk sebagai…");
         ui.add_space(4.0);
-        ui.columns(4, |c| {
-            for (ui, j) in c.iter_mut().zip(JenisInstansi::SEMUA) {
-                let aktif = u.jenis == j;
-                let r = egui::Frame::new()
-                    .fill(if aktif { p.pilih } else { p.kartu })
-                    .stroke(egui::Stroke::new(
-                        if aktif { 1.5 } else { 1.0 },
-                        if aktif { p.aksen } else { p.garis },
-                    ))
-                    .corner_radius(10)
-                    .inner_margin(egui::Margin::symmetric(6, 10))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.vertical_centered(|ui| {
-                            ui.label(ikon::rt(j.ikon()).size(22.0).color(p.aksen));
-                            ui.label(RichText::new(j.label()).strong());
-                        });
-                    })
-                    .response
-                    .interact(egui::Sense::click())
-                    .on_hover_cursor(egui::CursorIcon::PointingHand);
-                if r.clicked() && !aktif {
-                    pilih_lain = Some(j);
+        let kolom = if tema::sempit(ui) { 2 } else { 4 };
+        for baris in JenisInstansi::SEMUA.chunks(kolom) {
+            ui.columns(kolom, |c| {
+                for (ui, j) in c.iter_mut().zip(baris.iter().copied()) {
+                    let aktif = u.jenis == j;
+                    let r = egui::Frame::new()
+                        .fill(if aktif { p.pilih } else { p.kartu })
+                        .stroke(egui::Stroke::new(
+                            if aktif { 1.5 } else { 1.0 },
+                            if aktif { p.aksen } else { p.garis },
+                        ))
+                        .corner_radius(10)
+                        .inner_margin(egui::Margin::symmetric(6, 10))
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.vertical_centered(|ui| {
+                                ui.label(ikon::rt(j.ikon()).size(22.0).color(p.aksen));
+                                ui.label(RichText::new(j.label()).strong());
+                            });
+                        })
+                        .response
+                        .interact(egui::Sense::click())
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                    if r.clicked() && !aktif {
+                        pilih_lain = Some(j);
+                    }
                 }
-            }
-        });
+            });
+        }
         ui.add_space(8.0);
         if u.jenis == app.instansi.jenis {
             tema::label_redup(

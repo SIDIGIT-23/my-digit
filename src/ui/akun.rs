@@ -1,6 +1,6 @@
 //! Data master: Akun Kas & Bank, dan Kategori.
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, RichText, Vec2};
 
 use super::ikon;
 use super::{MyDigitApp, pemisah, tema};
@@ -33,6 +33,32 @@ struct FormKategori {
     galat: Option<String>,
 }
 
+pub fn buka_akun_baru(app: &mut MyDigitApp) {
+    app.ui_akun.akun = Some(FormAkun {
+        id: 0,
+        nama: String::new(),
+        jenis: JenisAkun::Bank,
+        no_rekening: String::new(),
+        saldo_awal: String::new(),
+        galat: None,
+    });
+}
+
+pub fn buka_kategori_baru(app: &mut MyDigitApp) {
+    app.ui_akun.kategori = Some(FormKategori {
+        id: 0,
+        kode: String::new(),
+        nama: String::new(),
+        arus: Arus::Keluar,
+        galat: None,
+    });
+}
+
+/// Pengembangan: buka dialog hapus akun pertama.
+pub fn buka_hapus_akun_dev(app: &mut MyDigitApp) {
+    app.ui_akun.hapus_akun = app.akun.first().map(|a| a.id);
+}
+
 pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
     let contoh_bank = match app.instansi.sumber_dana.first() {
         Some(s) => format!("mis. Bank Riau Kepri — {s}"),
@@ -50,14 +76,7 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         });
         tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, ikon::PLUS, "Akun Baru").clicked() {
-                app.ui_akun.akun = Some(FormAkun {
-                    id: 0,
-                    nama: String::new(),
-                    jenis: JenisAkun::Bank,
-                    no_rekening: String::new(),
-                    saldo_awal: String::new(),
-                    galat: None,
-                });
+                buka_akun_baru(app);
             }
         });
     });
@@ -73,44 +92,63 @@ pub fn tampil_akun(app: &mut MyDigitApp, ui: &mut egui::Ui) {
             if i > 0 {
                 pemisah(ui);
             }
+            // Nama & info mengisi sisa lebar (dipotong "…"), sehingga baris tidak
+            // menumpuk di layar sempit; di ponsel tombol menjadi ikon saja.
+            let ponsel = tema::sempit(ui);
+            let (mut ubah, mut hapus) = (false, false);
             ui.horizontal(|ui| {
-                ui.label(
-                    ikon::rt(if a.jenis == JenisAkun::Bank {
-                        ikon::BANK
-                    } else {
-                        ikon::MONEY
-                    })
-                    .size(22.0)
-                    .color(p.aksen),
-                );
-                ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 1.0;
-                    ui.label(RichText::new(&a.nama).strong());
-                    let mut info = a.jenis.label().to_string();
-                    if !a.no_rekening.is_empty() {
-                        info += &format!(" · No. {}", a.no_rekening);
-                    }
-                    info += &format!(" · Saldo awal {}", rupiah(a.saldo_awal));
-                    tema::label_redup(ui, info);
-                });
+                let simbol = if a.jenis == JenisAkun::Bank {
+                    ikon::BANK
+                } else {
+                    ikon::MONEY
+                };
+                ui.label(ikon::rt(simbol).size(22.0).color(p.aksen));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if tema::tombol_bahaya(ui, ikon::TRASH, "Hapus").clicked() {
-                        app.ui_akun.hapus_akun = Some(a.id);
+                    if ponsel {
+                        hapus = tema::tombol_ikon(ui, ikon::TRASH, "Hapus", p.merah).clicked();
+                        ubah =
+                            tema::tombol_ikon(ui, ikon::PENCIL_SIMPLE, "Ubah", p.teks2).clicked();
+                        ui.add_space(4.0);
+                    } else {
+                        hapus = tema::tombol_bahaya(ui, ikon::TRASH, "Hapus").clicked();
+                        ubah = tema::tombol(ui, ikon::PENCIL_SIMPLE, "Ubah").clicked();
+                        ui.add_space(12.0);
                     }
-                    if tema::tombol(ui, ikon::PENCIL_SIMPLE, "Ubah").clicked() {
-                        app.ui_akun.akun = Some(FormAkun {
-                            id: a.id,
-                            nama: a.nama.clone(),
-                            jenis: a.jenis,
-                            no_rekening: a.no_rekening.clone(),
-                            saldo_awal: ribuan(a.saldo_awal),
-                            galat: None,
-                        });
-                    }
-                    ui.add_space(12.0);
-                    ui.label(RichText::new(rupiah(saldo[i])).size(16.0).strong());
+                    let ukuran = if ponsel { 14.0 } else { 16.0 };
+                    ui.label(RichText::new(rupiah(saldo[i])).size(ukuran).strong());
+                    let sisa = Vec2::new(ui.available_width(), 36.0);
+                    ui.allocate_ui_with_layout(
+                        sisa,
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            ui.spacing_mut().item_spacing.y = 1.0;
+                            ui.add(egui::Label::new(RichText::new(&a.nama).strong()).truncate());
+                            let mut info = a.jenis.label().to_string();
+                            if !a.no_rekening.is_empty() {
+                                info += &format!(" · No. {}", a.no_rekening);
+                            }
+                            info += &format!(" · Saldo awal {}", rupiah(a.saldo_awal));
+                            ui.add(
+                                egui::Label::new(RichText::new(info).size(12.0).color(p.teks2))
+                                    .truncate(),
+                            );
+                        },
+                    );
                 });
             });
+            if hapus {
+                app.ui_akun.hapus_akun = Some(a.id);
+            }
+            if ubah {
+                app.ui_akun.akun = Some(FormAkun {
+                    id: a.id,
+                    nama: a.nama.clone(),
+                    jenis: a.jenis,
+                    no_rekening: a.no_rekening.clone(),
+                    saldo_awal: ribuan(a.saldo_awal),
+                    galat: None,
+                });
+            }
         }
     });
     ui.add_space(8.0);
@@ -202,13 +240,7 @@ pub fn tampil_kategori(app: &mut MyDigitApp, ui: &mut egui::Ui) {
         });
         tema::kanan(ui, |ui| {
             if tema::tombol_utama(ui, ikon::PLUS, "Kategori Baru").clicked() {
-                app.ui_akun.kategori = Some(FormKategori {
-                    id: 0,
-                    kode: String::new(),
-                    nama: String::new(),
-                    arus: Arus::Keluar,
-                    galat: None,
-                });
+                buka_kategori_baru(app);
             }
         });
     });
